@@ -2,6 +2,10 @@ pub mod manager;
 pub mod chain;
 pub mod traits;
 pub mod maijie_l7;
+pub mod virtual_device;
+
+#[cfg(test)]
+mod tests;
 
 use crate::error::DeviceError;
 use serde::{Deserialize, Serialize};
@@ -86,46 +90,46 @@ impl DeviceInfo {
             updated_at: now,
         }
     }
-    
+
     pub fn update_status(&mut self, status: DeviceStatus) {
         self.status = status;
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn update_temperature(&mut self, temperature: f32) {
         self.temperature = Some(temperature);
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn update_hashrate(&mut self, hashrate: f64) {
         self.hashrate = hashrate;
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn increment_accepted_shares(&mut self) {
         self.accepted_shares += 1;
         self.last_share_time = Some(SystemTime::now());
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn increment_rejected_shares(&mut self) {
         self.rejected_shares += 1;
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn increment_hardware_errors(&mut self) {
         self.hardware_errors += 1;
         self.updated_at = SystemTime::now();
     }
-    
+
     pub fn is_healthy(&self) -> bool {
         matches!(self.status, DeviceStatus::Idle | DeviceStatus::Mining)
     }
-    
+
     pub fn is_overheated(&self) -> bool {
         matches!(self.status, DeviceStatus::Overheated)
     }
-    
+
     pub fn get_error_rate(&self) -> f64 {
         let total_shares = self.accepted_shares + self.rejected_shares;
         if total_shares == 0 {
@@ -134,7 +138,7 @@ impl DeviceInfo {
             self.rejected_shares as f64 / total_shares as f64 * 100.0
         }
     }
-    
+
     pub fn get_hardware_error_rate(&self) -> f64 {
         let total_work = self.accepted_shares + self.rejected_shares + self.hardware_errors;
         if total_work == 0 {
@@ -172,11 +176,11 @@ impl Work {
             expires_at: now + Duration::from_secs(120), // 2分钟过期
         }
     }
-    
+
     pub fn is_expired(&self) -> bool {
         SystemTime::now() > self.expires_at
     }
-    
+
     pub fn time_to_expire(&self) -> Duration {
         self.expires_at.duration_since(SystemTime::now())
             .unwrap_or(Duration::from_secs(0))
@@ -207,12 +211,12 @@ impl MiningResult {
             is_valid: false, // 需要验证后设置
         }
     }
-    
+
     pub fn with_extra_nonce(mut self, extra_nonce: u32) -> Self {
         self.extra_nonce = Some(extra_nonce);
         self
     }
-    
+
     pub fn mark_valid(mut self) -> Self {
         self.is_valid = true;
         self
@@ -265,23 +269,23 @@ impl DeviceStats {
     pub fn new() -> Self {
         Default::default()
     }
-    
+
     pub fn record_hash(&mut self, count: u64) {
         self.total_hashes += count;
     }
-    
+
     pub fn record_valid_nonce(&mut self) {
         self.valid_nonces += 1;
     }
-    
+
     pub fn record_invalid_nonce(&mut self) {
         self.invalid_nonces += 1;
     }
-    
+
     pub fn record_hardware_error(&mut self) {
         self.hardware_errors += 1;
     }
-    
+
     pub fn record_temperature(&mut self, temp: f32) {
         self.temperature_readings.push(temp);
         // 保持最近100个温度读数
@@ -289,7 +293,7 @@ impl DeviceStats {
             self.temperature_readings.remove(0);
         }
     }
-    
+
     pub fn record_hashrate(&mut self, hashrate: f64) {
         self.hashrate_history.push(hashrate);
         // 保持最近100个算力读数
@@ -297,12 +301,12 @@ impl DeviceStats {
             self.hashrate_history.remove(0);
         }
     }
-    
+
     pub fn record_restart(&mut self) {
         self.restart_count += 1;
         self.last_restart_time = Some(SystemTime::now());
     }
-    
+
     pub fn get_average_temperature(&self) -> Option<f32> {
         if self.temperature_readings.is_empty() {
             None
@@ -311,7 +315,7 @@ impl DeviceStats {
             Some(sum / self.temperature_readings.len() as f32)
         }
     }
-    
+
     pub fn get_average_hashrate(&self) -> Option<f64> {
         if self.hashrate_history.is_empty() {
             None
@@ -320,7 +324,7 @@ impl DeviceStats {
             Some(sum / self.hashrate_history.len() as f64)
         }
     }
-    
+
     pub fn get_error_rate(&self) -> f64 {
         let total_nonces = self.valid_nonces + self.invalid_nonces;
         if total_nonces == 0 {
@@ -329,7 +333,7 @@ impl DeviceStats {
             self.invalid_nonces as f64 / total_nonces as f64 * 100.0
         }
     }
-    
+
     pub fn get_hardware_error_rate(&self) -> f64 {
         let total_work = self.valid_nonces + self.invalid_nonces + self.hardware_errors;
         if total_work == 0 {

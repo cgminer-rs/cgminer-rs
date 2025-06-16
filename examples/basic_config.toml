@@ -1,0 +1,78 @@
+# Basic CGMiner-RS Configuration
+# This is a minimal configuration for getting started with CGMiner-RS
+
+[mining]
+# Check for new work every 5 seconds
+scan_interval = 5
+
+# Timeout for work restart (60 seconds)
+work_restart_timeout = 60
+
+# Enable automatic parameter tuning
+enable_auto_tuning = true
+
+[devices]
+# Scan for devices every 10 seconds
+scan_interval = 10
+
+# Single chain configuration for Maijie L7
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 500        # 500 MHz - conservative setting
+voltage = 850         # 850 mV - stable voltage
+auto_tune = true      # Let the system optimize automatically
+chip_count = 76       # Standard Maijie L7 chip count
+
+[pools]
+# Use failover strategy - primary pool with backup
+strategy = "Failover"
+
+# Retry failed connections every 30 seconds
+retry_interval = 30
+
+# Primary mining pool
+[[pools.pools]]
+url = "stratum+tcp://pool.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 1
+
+# Backup mining pool
+[[pools.pools]]
+url = "stratum+tcp://backup.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 2
+
+[api]
+# Enable web interface and API
+enabled = true
+
+# Bind to localhost only (secure)
+bind_address = "127.0.0.1"
+
+# Standard HTTP port
+port = 8080
+
+# No authentication token (add one for production)
+# auth_token = "your_secret_token"
+
+# Allow all origins (restrict in production)
+allow_origins = ["*"]
+
+[monitoring]
+# Enable system monitoring
+enabled = true
+
+# Collect metrics every 30 seconds
+metrics_interval = 30
+
+# Alert thresholds
+[monitoring.alert_thresholds]
+max_temperature = 85.0          # System temperature limit
+max_device_temperature = 90.0   # Device temperature limit
+max_cpu_usage = 90             # CPU usage limit
+max_memory_usage = 90          # Memory usage limit
+max_error_rate = 5.0           # Error rate limit
+min_hashrate = 30.0            # Minimum acceptable hashrate

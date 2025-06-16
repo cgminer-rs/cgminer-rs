@@ -1,0 +1,120 @@
+# Advanced CGMiner-RS Configuration
+# This configuration demonstrates advanced features and optimization
+
+[mining]
+# Faster work scanning for lower latency
+scan_interval = 3
+
+# Shorter work restart timeout for responsiveness
+work_restart_timeout = 30
+
+# Enable auto-tuning for optimal performance
+enable_auto_tuning = true
+
+[devices]
+# More frequent device scanning
+scan_interval = 5
+
+# Multiple chains with different configurations
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 520        # Higher frequency for maximum hashrate
+voltage = 870         # Higher voltage to support frequency
+auto_tune = false     # Manual tuning for this chain
+chip_count = 76
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 500        # Balanced frequency
+voltage = 850         # Standard voltage
+auto_tune = true      # Auto-tune this chain
+chip_count = 76
+
+[[devices.chains]]
+id = 2
+enabled = true
+frequency = 480        # Lower frequency for efficiency
+voltage = 830         # Lower voltage for power savings
+auto_tune = true      # Auto-tune for efficiency
+chip_count = 76
+
+[[devices.chains]]
+id = 3
+enabled = false       # Disabled chain (maintenance)
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+
+[pools]
+# Load balancing across multiple pools
+strategy = "LoadBalance"
+
+# Faster retry for better responsiveness
+retry_interval = 15
+
+# Primary pool - high priority
+[[pools.pools]]
+url = "stratum+tcp://primary.pool.com:4444"
+user = "username.worker_primary"
+password = "x"
+priority = 1
+
+# Secondary pool - medium priority
+[[pools.pools]]
+url = "stratum+tcp://secondary.pool.com:4444"
+user = "username.worker_secondary"
+password = "x"
+priority = 2
+
+# Backup pool - low priority
+[[pools.pools]]
+url = "stratum+tcp://backup.pool.com:3333"
+user = "username.worker_backup"
+password = "x"
+priority = 3
+
+# Solo mining pool (optional)
+[[pools.pools]]
+url = "stratum+tcp://solo.pool.com:4444"
+user = "bitcoin_address"
+password = "x"
+priority = 4
+
+[api]
+# Enable API with security
+enabled = true
+
+# Bind to all interfaces for remote access
+bind_address = "0.0.0.0"
+
+# Standard port
+port = 8080
+
+# Secure authentication token
+auth_token = "secure_random_token_change_this"
+
+# Restricted CORS origins for security
+allow_origins = [
+    "https://mining-dashboard.example.com",
+    "https://localhost:3000",
+    "http://192.168.1.100:3000"
+]
+
+[monitoring]
+# Enable comprehensive monitoring
+enabled = true
+
+# Frequent metrics collection for real-time monitoring
+metrics_interval = 15
+
+# Strict alert thresholds for production environment
+[monitoring.alert_thresholds]
+max_temperature = 80.0          # Conservative system temperature
+max_device_temperature = 85.0   # Conservative device temperature
+max_cpu_usage = 85             # CPU usage threshold
+max_memory_usage = 85          # Memory usage threshold
+max_error_rate = 3.0           # Strict error rate limit
+min_hashrate = 35.0            # Higher minimum hashrate expectation
