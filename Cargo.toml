@@ -1,0 +1,88 @@
+[package]
+name = "cgminer-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["CGMiner Rust Team"]
+description = "High-performance ASIC Bitcoin miner written in Rust"
+license = "GPL-3.0"
+repository = "https://github.com/your-org/cgminer-rs"
+keywords = ["bitcoin", "mining", "asic", "cryptocurrency"]
+categories = ["hardware-support", "network-programming"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.0", features = ["full"] }
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Configuration
+config = "0.14"
+clap = { version = "4.0", features = ["derive"] }
+
+# Networking
+reqwest = { version = "0.11", features = ["json"] }
+tungstenite = "0.20"
+tokio-tungstenite = "0.20"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# Utilities
+uuid = { version = "1.0", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+sha2 = "0.10"
+
+# Hardware interface
+libc = "0.2"
+nix = "0.27"
+
+# Metrics and monitoring
+prometheus = "0.13"
+
+# Web server for API
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.69"
+
+[dev-dependencies]
+tokio-test = "0.4"
+criterion = "0.5"
+mockall = "0.12"
+
+[[bin]]
+name = "cgminer-rs"
+path = "src/main.rs"
+
+[[bench]]
+name = "mining_benchmark"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+debug = true
+opt-level = 0
+
+[features]
+default = ["maijie-l7"]
+maijie-l7 = []
+web-ui = []
+metrics = ["prometheus"]

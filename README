@@ -1,0 +1,15 @@
+# CGMiner-RS
+
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Build Status](https://img.shields.io/github/workflow/status/your-org/cgminer-rs/CI)](https://github.com/your-org/cgminer-rs/actions)
+
+🦀 **高性能的 ASIC 比特币挖矿软件**，使用 Rust 语言重写，专门针对 Maijie L7 ASIC 矿机进行优化。
+
+> 这是对原有 C 语言版本 cgminer 的现代化重构，提供更好的内存安全性、并发性能和可维护性。
+
+## 项目状态
+
+✅ **架构设计完成** - 详细的系统架构和模块设计
+🚧 **核心开发中** - 正在实现核心挖矿功能
+📋 **文档完善** - 完整的技术文档和部署指南

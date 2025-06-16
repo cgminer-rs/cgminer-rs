@@ -1,0 +1,260 @@
+# CGMiner-RS 配置文件
+# 详细配置说明请参考: docs/configuration.md
+
+[general]
+# 日志级别: trace, debug, info, warn, error
+log_level = "info"
+
+# 日志文件路径 (可选)
+log_file = "/var/log/cgminer-rs/cgminer.log"
+
+# PID 文件路径 (可选)
+pid_file = "/var/run/cgminer-rs.pid"
+
+# 工作重启超时时间 (秒)
+work_restart_timeout = 60
+
+# 扫描时间间隔 (秒)
+scan_time = 30
+
+[devices]
+# 自动检测设备
+auto_detect = true
+
+# 设备扫描间隔 (秒)
+scan_interval = 5
+
+# 链配置
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 500        # MHz
+voltage = 850          # mV
+auto_tune = true       # 启用自动调优
+chip_count = 76        # 芯片数量
+temperature_limit = 85.0  # 温度限制 (°C)
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+temperature_limit = 85.0
+
+# 自动调优配置 (可选)
+[devices.auto_tuning]
+enabled = true
+target_efficiency = 0.065  # 目标效率 (MH/J)
+max_temperature = 85.0     # 最大温度 (°C)
+tuning_interval = 3600     # 调优间隔 (秒)
+voltage_step = 25          # 电压调整步长 (mV)
+frequency_step = 25        # 频率调整步长 (MHz)
+
+[pools]
+# 矿池策略: failover, round_robin, load_balance, quota
+strategy = "failover"
+
+# 故障转移超时时间 (秒)
+failover_timeout = 30
+
+# 重试间隔 (秒)
+retry_interval = 10
+
+# 主矿池配置
+[[pools.pools]]
+url = "stratum+tcp://pool.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 1
+enabled = true
+
+# 备用矿池配置
+[[pools.pools]]
+url = "stratum+tcp://backup.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 2
+enabled = true
+
+# 第三个矿池 (可选)
+[[pools.pools]]
+url = "stratum+tcp://pool3.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 3
+enabled = false
+
+[api]
+# 启用 API 服务器
+enabled = true
+
+# 绑定地址
+bind_address = "127.0.0.1"
+
+# API 端口
+port = 4028
+
+# 允许的来源 (CORS)
+allow_origins = ["*"]
+
+# 认证令牌 (可选，用于 API 安全)
+# auth_token = "your-secret-token-here"
+
+[monitoring]
+# 启用监控系统
+enabled = true
+
+# 指标收集间隔 (秒)
+metrics_interval = 30
+
+# Prometheus 指标端口 (可选)
+prometheus_port = 9090
+
+# 告警阈值配置
+[monitoring.alert_thresholds]
+# 温度告警阈值 (°C)
+temperature_warning = 80.0
+temperature_critical = 90.0
+
+# 算力下降告警阈值 (百分比)
+hashrate_drop_percent = 20.0
+
+# 错误率告警阈值 (百分比)
+error_rate_percent = 5.0
+
+# 功耗限制 (瓦特)
+power_limit_watts = 3500.0
+
+# 高级配置 (可选)
+[advanced]
+# 工作队列大小
+work_queue_size = 1000
+
+# 结果队列大小
+result_queue_size = 1000
+
+# 批处理大小
+batch_size = 100
+
+# 工作线程数 (0 = 自动检测)
+worker_threads = 0
+
+# 网络超时 (秒)
+network_timeout = 30
+
+# 重连间隔 (秒)
+reconnect_interval = 5
+
+# 最大重连次数
+max_reconnect_attempts = 10
+
+# 安全配置 (可选)
+[security]
+# 启用 TLS
+enable_tls = false
+
+# TLS 证书文件路径
+# cert_file = "/etc/cgminer-rs/server.crt"
+
+# TLS 私钥文件路径
+# key_file = "/etc/cgminer-rs/server.key"
+
+# 允许的 IP 地址范围
+# allowed_ips = ["192.168.1.0/24", "10.0.0.0/8"]
+
+# 日志配置 (可选)
+[logging]
+# 日志格式: text, json
+format = "text"
+
+# 日志轮转: daily, hourly, size
+rotation = "daily"
+
+# 保留的日志文件数量
+max_files = 7
+
+# 单个日志文件最大大小
+max_size = "100MB"
+
+# 日志输出目标
+[logging.targets]
+console = true
+file = true
+syslog = false
+
+# 性能配置 (可选)
+[performance]
+# CPU 亲和性设置 (可选)
+# cpu_affinity = [0, 1, 2, 3]
+
+# 内存预分配大小 (MB)
+memory_pool_size = 64
+
+# 启用零拷贝优化
+zero_copy = true
+
+# 启用批量处理
+batch_processing = true
+
+# I/O 缓冲区大小 (KB)
+io_buffer_size = 64
+
+# 硬件特定配置 (可选)
+[hardware]
+# SPI 总线速度 (Hz)
+spi_speed = 1000000
+
+# UART 波特率
+uart_baudrate = 115200
+
+# GPIO 引脚映射 (可选)
+[hardware.gpio]
+# reset_pin = 18
+# power_pin = 19
+# led_pin = 20
+
+# PWM 配置 (可选)
+[hardware.pwm]
+# fan_channel = 0
+# fan_frequency = 25000
+
+# 温度传感器配置 (可选)
+[hardware.temperature]
+# sensor_type = "lm75"
+# i2c_address = 0x48
+# update_interval = 5
+
+# Web UI 配置 (可选)
+[web_ui]
+enabled = false
+port = 8080
+static_files_path = "./web"
+auth_required = false
+
+# 数据库配置 (可选，用于历史数据存储)
+[database]
+enabled = false
+type = "sqlite"
+path = "/var/lib/cgminer-rs/data.db"
+retention_days = 30
+
+# 通知配置 (可选)
+[notifications]
+enabled = false
+
+# 邮件通知
+[notifications.email]
+enabled = false
+smtp_server = "smtp.example.com"
+smtp_port = 587
+username = "your-email@example.com"
+password = "your-email-password"
+to_addresses = ["admin@example.com"]
+
+# Webhook 通知
+[notifications.webhook]
+enabled = false
+url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+timeout = 10
