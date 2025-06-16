@@ -1,0 +1,186 @@
+# CGMiner-RS ASIC 设备生产配置
+# 此配置专门用于 ASIC 设备的实际挖矿
+
+[general]
+log_level = "info"  # 生产环境使用标准日志级别
+log_file = "/var/log/cgminer-rs/cgminer.log"
+pid_file = "/var/run/cgminer-rs.pid"
+work_restart_timeout = 60
+scan_time = 30
+device_mode = "asic"  # 仅使用 ASIC 设备
+
+[devices.virtual]
+enabled = false  # 禁用虚拟设备
+
+[devices.asic]
+enabled = true
+auto_detect = true
+scan_interval = 5
+
+# 第一条链配置 (根据实际硬件调整)
+[[devices.asic.chains]]
+id = 0
+enabled = true
+frequency = 500  # 根据 ASIC 规格调整
+voltage = 850    # 根据 ASIC 规格调整
+auto_tune = true
+chip_count = 76  # 根据实际芯片数量调整
+temperature_limit = 85.0
+
+# 第二条链配置
+[[devices.asic.chains]]
+id = 1
+enabled = true
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+temperature_limit = 85.0
+
+# 第三条链配置 (如果有)
+[[devices.asic.chains]]
+id = 2
+enabled = false  # 根据实际硬件启用
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+temperature_limit = 85.0
+
+[devices.asic.auto_tuning]
+enabled = true
+target_efficiency = 0.065
+max_temperature = 85.0
+tuning_interval = 3600
+voltage_step = 25
+frequency_step = 25
+
+[pools]
+strategy = "failover"
+failover_timeout = 30
+retry_interval = 10
+
+[pools.asic]
+# 主矿池 (替换为实际矿池地址)
+[[pools.asic.pools]]
+url = "stratum+tcp://pool.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 1
+enabled = true
+description = "主要生产矿池"
+
+# 备用矿池
+[[pools.asic.pools]]
+url = "stratum+tcp://backup.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 2
+enabled = true
+description = "备用生产矿池"
+
+# 第三备用矿池
+[[pools.asic.pools]]
+url = "stratum+tcp://pool3.example.com:4444"
+user = "your_username.worker1"
+password = "your_password"
+priority = 3
+enabled = true
+description = "第三备用矿池"
+
+[api]
+enabled = true
+bind_address = "0.0.0.0"  # 生产环境可能需要外部访问
+port = 4028
+allow_origins = ["*"]
+# auth_token = "your-secret-token-here"  # 生产环境建议启用认证
+
+[monitoring]
+enabled = true
+metrics_interval = 30
+prometheus_port = 9090
+
+[monitoring.alert_thresholds]
+temperature_warning = 80.0
+temperature_critical = 90.0
+hashrate_drop_percent = 20.0
+error_rate_percent = 5.0
+power_limit_watts = 3500.0
+
+[advanced]
+work_queue_size = 1000
+result_queue_size = 1000
+batch_size = 100
+worker_threads = 0  # 自动检测
+network_timeout = 30
+reconnect_interval = 5
+max_reconnect_attempts = 10
+
+[security]
+enable_tls = false
+# cert_file = "/etc/cgminer-rs/server.crt"
+# key_file = "/etc/cgminer-rs/server.key"
+# allowed_ips = ["192.168.1.0/24", "10.0.0.0/8"]
+
+[logging]
+format = "text"
+rotation = "daily"
+max_files = 7
+max_size = "100MB"
+
+[logging.targets]
+console = false  # 生产环境通常不输出到控制台
+file = true
+syslog = true    # 生产环境建议使用 syslog
+
+[performance]
+memory_pool_size = 64
+zero_copy = true
+batch_processing = true
+io_buffer_size = 64
+
+[hardware]
+spi_speed = 1000000
+uart_baudrate = 115200
+
+[hardware.gpio]
+# reset_pin = 18
+# power_pin = 19
+# led_pin = 20
+
+[hardware.pwm]
+# fan_channel = 0
+# fan_frequency = 25000
+
+[hardware.temperature]
+# sensor_type = "lm75"
+# i2c_address = 0x48
+# update_interval = 5
+
+[web_ui]
+enabled = true
+port = 8080
+static_files_path = "./web"
+auth_required = true  # 生产环境建议启用认证
+
+[database]
+enabled = true
+type = "sqlite"
+path = "/var/lib/cgminer-rs/data.db"
+retention_days = 30
+
+[notifications]
+enabled = true
+
+[notifications.email]
+enabled = true
+smtp_server = "smtp.example.com"
+smtp_port = 587
+username = "your-email@example.com"
+password = "your-email-password"
+to_addresses = ["admin@example.com"]
+
+[notifications.webhook]
+enabled = false
+url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+timeout = 10

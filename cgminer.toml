@@ -17,7 +17,52 @@ work_restart_timeout = 60
 # 扫描时间间隔 (秒)
 scan_time = 30
 
-[devices]
+# 设备模式选择: "virtual" 用于测试, "asic" 用于实际挖矿
+# 可选值: "virtual", "asic", "mixed"
+device_mode = "virtual"
+
+# =============================================================================
+# 虚拟设备配置 (用于测试和开发)
+# =============================================================================
+[devices.virtual]
+# 启用虚拟设备 (仅在 device_mode = "virtual" 或 "mixed" 时生效)
+enabled = true
+
+# 虚拟设备数量
+device_count = 4
+
+# 虚拟设备配置
+[devices.virtual.config]
+frequency = 600        # MHz (虚拟频率)
+voltage = 900          # mV (虚拟电压)
+auto_tune = false      # 虚拟设备不需要自动调优
+chip_count = 64        # 虚拟芯片数量
+temperature_limit = 80.0  # 虚拟温度限制 (°C)
+fan_speed = 50         # 虚拟风扇速度 (%)
+
+# 虚拟挖矿参数
+[devices.virtual.mining]
+# 模拟算力范围 (MH/s)
+min_hashrate = 50.0
+max_hashrate = 200.0
+
+# 模拟硬件错误率 (%)
+error_rate = 0.1
+
+# 模拟温度范围 (°C)
+min_temperature = 40.0
+max_temperature = 70.0
+
+# 挖矿批次大小 (每次处理的哈希数)
+batch_size = 1000000
+
+# =============================================================================
+# ASIC 设备配置 (用于实际挖矿)
+# =============================================================================
+[devices.asic]
+# 启用 ASIC 设备 (仅在 device_mode = "asic" 或 "mixed" 时生效)
+enabled = true
+
 # 自动检测设备
 auto_detect = true
 
@@ -25,7 +70,7 @@ auto_detect = true
 scan_interval = 5
 
 # 链配置
-[[devices.chains]]
+[[devices.asic.chains]]
 id = 0
 enabled = true
 frequency = 500        # MHz
@@ -34,7 +79,7 @@ auto_tune = true       # 启用自动调优
 chip_count = 76        # 芯片数量
 temperature_limit = 85.0  # 温度限制 (°C)
 
-[[devices.chains]]
+[[devices.asic.chains]]
 id = 1
 enabled = true
 frequency = 500
@@ -44,7 +89,7 @@ chip_count = 76
 temperature_limit = 85.0
 
 # 自动调优配置 (可选)
-[devices.auto_tuning]
+[devices.asic.auto_tuning]
 enabled = true
 target_efficiency = 0.065  # 目标效率 (MH/J)
 max_temperature = 85.0     # 最大温度 (°C)
@@ -52,6 +97,9 @@ tuning_interval = 3600     # 调优间隔 (秒)
 voltage_step = 25          # 电压调整步长 (mV)
 frequency_step = 25        # 频率调整步长 (MHz)
 
+# =============================================================================
+# 矿池配置
+# =============================================================================
 [pools]
 # 矿池策略: failover, round_robin, load_balance, quota
 strategy = "failover"
@@ -62,29 +110,54 @@ failover_timeout = 30
 # 重试间隔 (秒)
 retry_interval = 10
 
+# 虚拟设备测试矿池配置
+[pools.virtual]
+# 测试矿池 (用于虚拟设备测试)
+[[pools.virtual.pools]]
+url = "stratum+tcp://testnet.pool.example.com:4444"
+user = "test_user.virtual_worker"
+password = "test_password"
+priority = 1
+enabled = true
+description = "测试网络矿池"
+
+# 本地测试矿池
+[[pools.virtual.pools]]
+url = "stratum+tcp://localhost:3333"
+user = "local_test.virtual"
+password = "test"
+priority = 2
+enabled = false
+description = "本地测试矿池"
+
+# ASIC 设备生产矿池配置
+[pools.asic]
 # 主矿池配置
-[[pools.pools]]
+[[pools.asic.pools]]
 url = "stratum+tcp://pool.example.com:4444"
 user = "your_username.worker1"
 password = "your_password"
 priority = 1
 enabled = true
+description = "主要生产矿池"
 
 # 备用矿池配置
-[[pools.pools]]
+[[pools.asic.pools]]
 url = "stratum+tcp://backup.example.com:4444"
 user = "your_username.worker1"
 password = "your_password"
 priority = 2
 enabled = true
+description = "备用生产矿池"
 
 # 第三个矿池 (可选)
-[[pools.pools]]
+[[pools.asic.pools]]
 url = "stratum+tcp://pool3.example.com:4444"
 user = "your_username.worker1"
 password = "your_password"
 priority = 3
 enabled = false
+description = "第三备用矿池"
 
 [api]
 # 启用 API 服务器
@@ -258,3 +331,37 @@ to_addresses = ["admin@example.com"]
 enabled = false
 url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
 timeout = 10
+
+# =============================================================================
+# 配置示例和说明
+# =============================================================================
+
+# 虚拟设备测试模式配置示例:
+# 1. 设置 device_mode = "virtual"
+# 2. 启用 devices.virtual.enabled = true
+# 3. 配置 pools.virtual 部分的测试矿池
+# 4. 设置较低的日志级别 (如 "debug") 以便调试
+
+# ASIC 设备生产模式配置示例:
+# 1. 设置 device_mode = "asic"
+# 2. 启用 devices.asic.enabled = true
+# 3. 配置 devices.asic.chains 部分的实际硬件参数
+# 4. 配置 pools.asic 部分的生产矿池
+# 5. 启用监控和告警功能
+
+# 混合模式配置示例:
+# 1. 设置 device_mode = "mixed"
+# 2. 同时启用 devices.virtual.enabled = true 和 devices.asic.enabled = true
+# 3. 配置两种设备类型的相应参数
+# 4. 可以用于在实际硬件上进行测试和对比
+
+# 快速切换配置的方法:
+# - 复制此文件为 cgminer-virtual.toml 和 cgminer-asic.toml
+# - 分别配置虚拟设备和 ASIC 设备参数
+# - 使用 --config 参数指定配置文件: ./cgminer-rs --config cgminer-virtual.toml
+
+# 注意事项:
+# - 虚拟设备仅用于测试，不会产生实际的挖矿收益
+# - ASIC 设备配置需要根据实际硬件规格调整
+# - 在生产环境中建议启用监控和告警功能
+# - 定期备份配置文件以防丢失

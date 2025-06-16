@@ -26,11 +26,17 @@ fn main() {
     // 设置编译特性
     setup_compile_features(&target_os, &target_arch);
 
-    // 编译 C 驱动程序
-    compile_c_drivers(&out_path);
-
-    // 生成 Rust 绑定
-    generate_bindings(&out_path);
+    // 编译 C 驱动程序 (仅在文件存在时)
+    if std::path::Path::new("drivers/maijie_l7.c").exists() {
+        compile_c_drivers(&out_path);
+        // 生成 Rust 绑定
+        generate_bindings(&out_path);
+    } else {
+        // 创建空的绑定文件
+        let empty_bindings = "// No C bindings available\n";
+        std::fs::write(out_path.join("bindings.rs"), empty_bindings)
+            .expect("Failed to write empty bindings file");
+    }
 
     // 链接库
     link_libraries(&target_os, &target_arch);
@@ -185,12 +191,12 @@ pub struct BuildInfo {{
 impl BuildInfo {{
     /// 获取完整版本字符串
     pub fn full_version(&self) -> String {{
-        format!("{} ({} on {})", self.version, self.git_hash, self.target_os)
+        format!("{{}} ({{}} on {{}})", self.version, self.git_hash, self.target_os)
     }}
 
     /// 获取平台信息
     pub fn platform(&self) -> String {{
-        format!("{}-{}", self.target_os, self.target_arch)
+        format!("{{}}-{{}}", self.target_os, self.target_arch)
     }}
 }}
 "#,
@@ -340,5 +346,4 @@ fn check_framework_exists(framework_name: &str) {
     } else {
         println!("cargo:warning=Framework {} not found", framework_name);
     }
-}
 }
