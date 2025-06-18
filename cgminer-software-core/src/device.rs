@@ -4,13 +4,14 @@ use cgminer_core::{
     MiningDevice, DeviceInfo, DeviceConfig, DeviceStatus, DeviceStats,
     Work, MiningResult, DeviceError, HashRate, Temperature, Voltage, Frequency
 };
+use crate::cpu_affinity::CpuAffinityManager;
 use async_trait::async_trait;
 use sha2::{Sha256, Digest};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::Mutex;
 use tokio::time::Instant;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 /// 软算法设备
 pub struct SoftwareDevice {
@@ -34,6 +35,8 @@ pub struct SoftwareDevice {
     start_time: Option<Instant>,
     /// 最后一次挖矿时间
     last_mining_time: Arc<RwLock<Option<Instant>>>,
+    /// CPU绑定管理器
+    cpu_affinity: Option<Arc<RwLock<CpuAffinityManager>>>,
 }
 
 impl SoftwareDevice {
@@ -59,6 +62,34 @@ impl SoftwareDevice {
             batch_size,
             start_time: None,
             last_mining_time: Arc::new(RwLock::new(None)),
+            cpu_affinity: None,
+        })
+    }
+
+    /// 创建带CPU绑定的软算法设备
+    pub async fn new_with_cpu_affinity(
+        device_info: DeviceInfo,
+        config: DeviceConfig,
+        target_hashrate: f64,
+        error_rate: f64,
+        batch_size: u32,
+        cpu_affinity: Arc<RwLock<CpuAffinityManager>>,
+    ) -> Result<Self, DeviceError> {
+        let device_id = device_info.id;
+        let stats = DeviceStats::new(device_id);
+
+        Ok(Self {
+            device_info: Arc::new(RwLock::new(device_info)),
+            config: Arc::new(RwLock::new(config)),
+            status: Arc::new(RwLock::new(DeviceStatus::Uninitialized)),
+            stats: Arc::new(RwLock::new(stats)),
+            current_work: Arc::new(Mutex::new(None)),
+            target_hashrate,
+            error_rate,
+            batch_size,
+            start_time: None,
+            last_mining_time: Arc::new(RwLock::new(None)),
+            cpu_affinity: Some(cpu_affinity),
         })
     }
 
@@ -259,7 +290,22 @@ impl MiningDevice for SoftwareDevice {
 
     /// 启动设备
     async fn start(&mut self) -> Result<(), DeviceError> {
-        info!("启动软算法设备 {}", self.device_id());
+        let device_id = self.device_id();
+        info!("启动软算法设备 {}", device_id);
+
+        // 如果启用了CPU绑定，为当前线程设置CPU绑定
+        if let Some(cpu_affinity) = &self.cpu_affinity {
+            let affinity_manager = cpu_affinity.read().map_err(|e| {
+                DeviceError::hardware_error(format!("Failed to acquire read lock: {}", e))
+            })?;
+
+            if let Err(e) = affinity_manager.bind_current_thread(device_id) {
+                warn!("设备 {} CPU绑定失败: {}", device_id, e);
+                // CPU绑定失败不应该阻止设备启动，只是记录警告
+            } else {
+                info!("✅ 设备 {} 已绑定到指定CPU核心", device_id);
+            }
+        }
 
         {
             let mut status = self.status.write().map_err(|e| {
@@ -269,7 +315,7 @@ impl MiningDevice for SoftwareDevice {
         }
 
         self.start_time = Some(Instant::now());
-        info!("软算法设备 {} 启动完成", self.device_id());
+        info!("软算法设备 {} 启动完成", device_id);
         Ok(())
     }
 

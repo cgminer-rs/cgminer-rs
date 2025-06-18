@@ -6,6 +6,7 @@
 pub mod core;
 pub mod device;
 pub mod factory;
+pub mod cpu_affinity;
 
 // 重新导出主要类型
 pub use core::SoftwareMiningCore;

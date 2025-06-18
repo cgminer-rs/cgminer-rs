@@ -33,6 +33,10 @@ sha2 = "0.10"
 async-trait = "0.1"
 fastrand = "2.0"
 
+# CPU affinity and system info
+core_affinity = "0.8"
+num_cpus = "1.16"
+
 # Logging
 tracing = "0.1"
 

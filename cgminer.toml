@@ -1,5 +1,19 @@
-# CGMiner-RS 配置文件
+# CGMiner-RS 配置文件 - 软算法核心默认配置
 # 详细配置说明请参考: docs/configuration.md
+#
+# 本配置文件默认使用软算法核心 (Software Core)
+# 软算法核心特点:
+# - 使用真实的SHA256算法进行CPU挖矿计算
+# - 产生真实可用的挖矿数据和份额，可提交到真实矿池
+# - 适合Mac环境、开发测试和低功耗挖矿场景
+# - 支持多设备并行挖矿，提高CPU利用率
+# - 与F2Pool等主流矿池完全兼容
+#
+# 如需使用ASIC硬件，请:
+# 1. 将 cores.enabled_cores 改为 ["asic"]
+# 2. 将 cores.default_core 改为 "asic"
+# 3. 启用 cores.asic_core.enabled = true
+# 4. 配置相应的ASIC硬件参数
 
 [general]
 # 日志级别: trace, debug, info, warn, error
@@ -21,25 +35,40 @@ scan_time = 30
 # 核心配置 (软算法核心和ASIC核心)
 # =============================================================================
 [cores]
-# 启用的核心列表
+# 启用的核心列表 - 默认使用软算法核心
+# 可选值: ["software", "asic"] 或 ["software"] 或 ["asic"]
 enabled_cores = ["software"]
 
-# 默认核心
+# 默认核心 - 软算法核心提供真实的SHA256计算
+# 软算法核心使用CPU进行真实的比特币挖矿计算，产生可用的挖矿数据
 default_core = "software"
 
-# 软算法核心配置 (用于虚拟设备测试)
+# 软算法核心配置 (推荐用于开发、测试和低功耗挖矿)
+# 软算法核心特点:
+# - 使用真实的SHA256算法进行CPU挖矿
+# - 产生真实可用的挖矿数据和份额
+# - 适合Mac环境和开发测试
+# - 支持多设备并行挖矿
+# - 支持CPU绑定，避免线程切换提升性能
 [cores.software_core]
 enabled = true
-device_count = 4
-min_hashrate = 1000000000.0  # 1 GH/s
-max_hashrate = 5000000000.0  # 5 GH/s
-error_rate = 0.01            # 1%
-batch_size = 1000
-work_timeout_ms = 5000
+device_count = 8             # 软算法设备数量 (建议4-16个)
+min_hashrate = 500000000.0   # 最小算力: 500 MH/s
+max_hashrate = 2000000000.0  # 最大算力: 2 GH/s (适合CPU挖矿)
+error_rate = 0.005           # 错误率: 0.5% (更低的错误率)
+batch_size = 2000            # 批处理大小 (增加效率)
+work_timeout_ms = 3000       # 工作超时: 3秒
 
-# ASIC核心配置 (用于实际硬件)
+# CPU绑定配置 - 提升挖矿性能和稳定性
+[cores.software_core.cpu_affinity]
+enabled = true               # 启用CPU绑定
+strategy = "round_robin"     # 绑定策略: round_robin, manual, performance_first, physical_only
+# manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
+
+# ASIC核心配置 (用于实际ASIC硬件设备)
+# 注意: 在Mac环境下通常不可用，主要用于Linux环境的ASIC设备
 [cores.asic_core]
-enabled = false
+enabled = false              # 默认禁用ASIC核心
 chain_count = 3
 spi_speed = 6000000          # 6MHz
 uart_baud = 115200
@@ -48,28 +77,32 @@ power_limit = 3000.0         # 3kW
 cooling_mode = "auto"
 
 # =============================================================================
-# 设备配置
+# 设备配置 (软算法核心设备配置)
 # =============================================================================
 [devices]
+# 自动检测设备 - 软算法核心会自动创建虚拟设备
 auto_detect = true
-scan_interval = 5
+# 设备扫描间隔 (秒) - 软算法设备扫描频率
+scan_interval = 10
 
-# 链配置
+# 软算法设备链配置 (虚拟链，用于模拟ASIC链结构)
+# 注意: 软算法核心会根据device_count自动创建设备
+# 以下配置主要用于兼容性，实际参数由软算法核心管理
 [[devices.chains]]
 id = 0
 enabled = true
-frequency = 500
-voltage = 850
-auto_tune = true
-chip_count = 76
+frequency = 1000             # 虚拟频率 (MHz) - 影响算力计算
+voltage = 900                # 虚拟电压 (mV) - 用于功耗估算
+auto_tune = false            # 软算法核心不支持自动调频
+chip_count = 1               # 每个软算法设备相当于1个虚拟芯片
 
 [[devices.chains]]
 id = 1
 enabled = true
-frequency = 500
-voltage = 850
-auto_tune = true
-chip_count = 76
+frequency = 1000
+voltage = 900
+auto_tune = false
+chip_count = 1
 
 # =============================================================================
 # 矿池配置
@@ -84,7 +117,8 @@ failover_timeout = 30
 # 重试间隔 (秒)
 retry_interval = 10
 
-# 矿池列表 - F2Pool 配置
+# 矿池列表 - F2Pool 配置 (适配软算法核心)
+# F2Pool支持软算法核心产生的真实份额提交
 [[pools.pools]]
 url = "stratum+tcp://btc.f2pool.com:1314"
 user = "kayuii.bbt"

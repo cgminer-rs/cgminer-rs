@@ -63,6 +63,18 @@ pub struct SoftwareCoreConfig {
     pub error_rate: f64,
     pub batch_size: u32,
     pub work_timeout_ms: u64,
+    /// CPU绑定配置
+    pub cpu_affinity: CpuAffinityConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CpuAffinityConfig {
+    /// 是否启用CPU绑定
+    pub enabled: bool,
+    /// 绑定策略: "round_robin", "manual", "performance_first", "physical_only"
+    pub strategy: String,
+    /// 手动核心映射 (设备ID -> CPU核心索引)
+    pub manual_mapping: Option<std::collections::HashMap<u32, usize>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -171,6 +183,11 @@ impl Default for Config {
                     error_rate: 0.01, // 1%
                     batch_size: 1000,
                     work_timeout_ms: 5000,
+                    cpu_affinity: CpuAffinityConfig {
+                        enabled: true,
+                        strategy: "round_robin".to_string(),
+                        manual_mapping: None,
+                    },
                 }),
                 asic_core: Some(AsicCoreConfig {
                     enabled: false,

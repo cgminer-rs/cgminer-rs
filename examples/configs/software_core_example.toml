@@ -1,0 +1,111 @@
+# CGMiner-RS 软算法核心示例配置
+# 本配置专门针对软算法核心进行优化
+# 适用于Mac环境、开发测试和CPU挖矿
+
+[general]
+log_level = "info"
+work_restart_timeout = 30    # 软算法核心工作重启超时较短
+scan_time = 15              # 软算法核心扫描间隔较短
+
+# =============================================================================
+# 软算法核心配置 - 优化设置
+# =============================================================================
+[cores]
+enabled_cores = ["software"]
+default_core = "software"
+
+[cores.software_core]
+enabled = true
+device_count = 12           # 增加设备数量以充分利用CPU
+min_hashrate = 800000000.0  # 800 MH/s - 适中的最小算力
+max_hashrate = 3000000000.0 # 3 GH/s - 适合现代CPU的最大算力
+error_rate = 0.003          # 0.3% - 很低的错误率
+batch_size = 4000           # 大批次处理提高效率
+work_timeout_ms = 2000      # 2秒超时 - 快速响应
+
+# 禁用ASIC核心
+[cores.asic_core]
+enabled = false
+
+# =============================================================================
+# 软算法设备配置
+# =============================================================================
+[devices]
+auto_detect = true
+scan_interval = 15          # 软算法设备扫描间隔
+
+# 软算法虚拟链配置 - 多链并行
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 1200            # 高频率提升算力
+voltage = 950
+auto_tune = false
+chip_count = 1
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 1200
+voltage = 950
+auto_tune = false
+chip_count = 1
+
+[[devices.chains]]
+id = 2
+enabled = true
+frequency = 1200
+voltage = 950
+auto_tune = false
+chip_count = 1
+
+# =============================================================================
+# F2Pool 矿池配置 - 软算法核心专用
+# =============================================================================
+[pools]
+strategy = "Failover"
+failover_timeout = 20       # 软算法核心故障转移更快
+retry_interval = 5          # 快速重试
+
+[[pools.pools]]
+url = "stratum+tcp://btc.f2pool.com:1314"
+user = "kayuii.001"
+password = "21235365876986800"
+priority = 1
+enabled = true
+
+[[pools.pools]]
+url = "stratum+tcp://btc-asia.f2pool.com:1314"
+user = "kayuii.001"
+password = "21235365876986800"
+priority = 2
+enabled = true
+
+# =============================================================================
+# API 配置 - 开发友好
+# =============================================================================
+[api]
+enabled = true
+bind_address = "127.0.0.1"
+port = 4028
+allow_origins = ["*"]
+
+# =============================================================================
+# 监控配置 - 软算法核心优化
+# =============================================================================
+[monitoring]
+enabled = true
+metrics_interval = 20       # 更频繁的监控
+
+[monitoring.alert_thresholds]
+# 软算法核心温度阈值较低 (CPU温度)
+temperature_warning = 70.0
+temperature_critical = 80.0
+hashrate_drop_percent = 15.0
+error_rate_percent = 2.0
+max_temperature = 75.0
+max_cpu_usage = 90.0        # 允许更高的CPU使用率
+max_memory_usage = 85.0
+max_device_temperature = 75.0
+max_error_rate = 2.0
+min_hashrate = 100.0        # 软算法核心最小算力阈值

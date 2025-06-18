@@ -57,9 +57,8 @@ impl MiningManager {
         // 创建设备管理器
         let mut device_manager = DeviceManager::new(config.devices.clone());
 
-        // 注册 Maijie L7 驱动
-        let maijie_driver = Box::new(crate::device::maijie_l7::MaijieL7Driver::new());
-        device_manager.register_driver(maijie_driver);
+        // 根据配置的核心类型注册相应的设备驱动
+        Self::register_drivers_for_cores(&mut device_manager, &config.cores).await?;
 
         // 创建矿池管理器
         let pool_manager = PoolManager::new(config.pools.clone()).await?;
@@ -93,6 +92,41 @@ impl MiningManager {
             result_process_handle: Arc::new(Mutex::new(None)),
             running: Arc::new(RwLock::new(false)),
         })
+    }
+
+    /// 根据配置的核心类型注册相应的设备驱动
+    async fn register_drivers_for_cores(
+        device_manager: &mut DeviceManager,
+        cores_config: &crate::config::CoresConfig
+    ) -> Result<(), MiningError> {
+        info!("根据配置注册设备驱动，启用的核心: {:?}", cores_config.enabled_cores);
+
+        for core_type in &cores_config.enabled_cores {
+            match core_type.as_str() {
+                "software" => {
+                    // 软算法核心不需要特定的设备驱动
+                    // 软算法核心会创建虚拟设备
+                    info!("软算法核心已启用，将使用虚拟设备");
+                }
+                "asic" => {
+                    // 只有在启用ASIC核心时才注册ASIC设备驱动
+                    if let Some(asic_config) = &cores_config.asic_core {
+                        if asic_config.enabled {
+                            info!("注册ASIC设备驱动: Maijie L7");
+                            let maijie_driver = Box::new(crate::device::maijie_l7::MaijieL7Driver::new());
+                            device_manager.register_driver(maijie_driver);
+                        } else {
+                            info!("ASIC核心已禁用，跳过ASIC设备驱动注册");
+                        }
+                    }
+                }
+                _ => {
+                    warn!("未知的核心类型: {}", core_type);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// 创建挖矿核心
