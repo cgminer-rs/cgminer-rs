@@ -118,6 +118,48 @@ impl MaijieL7Driver {
             fan_speed: Some(70),
         }
     }
+
+    /// 获取性能优化配置
+    pub fn performance_config(&self) -> DeviceConfig {
+        DeviceConfig {
+            chain_id: 0,
+            enabled: true,
+            frequency: 700,  // 高性能频率
+            voltage: 920,    // 高性能电压
+            auto_tune: true,
+            chip_count: 126,
+            temperature_limit: 80.0,  // 更严格的温度控制
+            fan_speed: Some(80),  // 更高的风扇速度
+        }
+    }
+
+    /// 获取节能配置
+    pub fn eco_config(&self) -> DeviceConfig {
+        DeviceConfig {
+            chain_id: 0,
+            enabled: true,
+            frequency: 600,  // 节能频率
+            voltage: 880,    // 节能电压
+            auto_tune: true,
+            chip_count: 126,
+            temperature_limit: 85.0,
+            fan_speed: Some(60),  // 较低的风扇速度
+        }
+    }
+
+    /// 获取静音配置
+    pub fn silent_config(&self) -> DeviceConfig {
+        DeviceConfig {
+            chain_id: 0,
+            enabled: true,
+            frequency: 550,  // 低频率减少噪音
+            voltage: 870,    // 低电压减少发热
+            auto_tune: false, // 禁用自动调优保持稳定
+            chip_count: 126,
+            temperature_limit: 75.0,  // 更低的温度限制
+            fan_speed: Some(50),  // 低风扇速度减少噪音
+        }
+    }
 }
 
 impl Default for MaijieL7Driver {
