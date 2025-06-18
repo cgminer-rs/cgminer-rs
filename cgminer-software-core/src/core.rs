@@ -385,12 +385,32 @@ impl MiningCore for SoftwareMiningCore {
         info!("创建软算法设备: {}", device_info.name);
 
         let device_config = cgminer_core::DeviceConfig::default();
+
+        // 从配置中获取参数，如果没有配置则使用合理的默认值
+        let default_config = CoreConfig::default();
+        let config = self.config.as_ref().unwrap_or(&default_config);
+
+        let target_hashrate = config.custom_params
+            .get("max_hashrate")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(2_000_000_000.0); // 2 GH/s 默认算力
+
+        let error_rate = config.custom_params
+            .get("error_rate")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.01); // 1% 错误率
+
+        let batch_size = config.custom_params
+            .get("batch_size")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1000) as u32; // 批次大小
+
         let device = SoftwareDevice::new(
             device_info,
             device_config,
-            2_000_000_000.0, // 2 GH/s 默认算力
-            0.01,            // 1% 错误率
-            1000,            // 批次大小
+            target_hashrate,
+            error_rate,
+            batch_size,
         ).await?;
 
         Ok(Box::new(device))

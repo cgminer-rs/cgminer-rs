@@ -30,7 +30,7 @@ work_timeout_ms = 1500      # 短超时提高响应速度
 enabled = true
 strategy = "performance_first"  # 性能优先策略
 # 手动绑定到性能核心 (示例：16核心系统)
-# manual_mapping = { 
+# manual_mapping = {
 #   0 = 0, 1 = 1, 2 = 2, 3 = 3, 4 = 4, 5 = 5, 6 = 6, 7 = 7,
 #   8 = 8, 9 = 9, 10 = 10, 11 = 11, 12 = 12, 13 = 13, 14 = 14, 15 = 15
 # }
@@ -163,53 +163,3 @@ max_memory_usage = 85.0
 max_device_temperature = 70.0
 max_error_rate = 1.0
 min_hashrate = 1000.0         # 高最小算力要求
-
-# =============================================================================
-# 极致性能优化配置
-# =============================================================================
-[performance]
-cpu_optimization = true
-thread_priority = "high"     # 高优先级
-memory_pool_size = 4096      # 大内存池
-work_queue_size = 20000      # 大工作队列
-
-use_sse = true
-use_avx = true               # 启用所有SIMD优化
-batch_processing = true
-
-# =============================================================================
-# 生产调试配置
-# =============================================================================
-[debug]
-enabled = false              # 生产环境禁用调试
-verbose_logging = false
-performance_profiling = false
-memory_tracking = false
-network_debugging = false
-
-# 生产测试模式
-[test_mode]
-enabled = false              # 生产环境禁用测试模式
-simulate_hardware = false
-fake_hashrate = false
-offline_mode = false
-
-# =============================================================================
-# 高性能高级配置
-# =============================================================================
-[advanced]
-# 优化的网络配置
-connection_timeout = 20
-read_timeout = 8
-write_timeout = 8
-keepalive_interval = 45
-
-# 生产重试配置
-max_retries = 3
-retry_delay = 3
-exponential_backoff = true
-
-# 高性能资源配置
-max_memory_usage = 8192      # 8GB内存限制
-max_cpu_cores = 0            # 使用所有可用核心
-max_threads_per_core = 4     # 每核心多线程

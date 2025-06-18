@@ -55,6 +55,7 @@ impl PoolManager {
                 pool_info.user.clone(),
                 pool_info.password.clone(),
                 pool_info.priority,
+                pool_info.enabled,
             );
 
             // 创建 Stratum 客户端
@@ -165,22 +166,24 @@ impl PoolManager {
         pools: &HashMap<u32, Arc<Mutex<Pool>>>,
         stratum_clients: &HashMap<u32, Arc<Mutex<StratumClient>>>,
     ) -> Result<(), PoolError> {
-        // 按优先级排序
-        let mut pool_priorities: Vec<(u32, u8)> = pools
-            .iter()
-            .map(|(id, pool)| {
-                let priority = tokio::task::block_in_place(|| {
-                    tokio::runtime::Handle::current().block_on(async {
-                        pool.lock().await.priority
-                    })
-                });
-                (*id, priority)
-            })
-            .collect();
+        // 按优先级排序，只包含启用的矿池
+        let mut pool_priorities: Vec<(u32, u8)> = Vec::new();
+
+        for (id, pool) in pools.iter() {
+            let pool_guard = pool.lock().await;
+            if pool_guard.enabled {
+                pool_priorities.push((*id, pool_guard.priority));
+            }
+        }
+
+        if pool_priorities.is_empty() {
+            warn!("No enabled pools found for failover connection");
+            return Err(PoolError::NoPoolsAvailable);
+        }
 
         pool_priorities.sort_by_key(|(_, priority)| *priority);
 
-        // 尝试连接最高优先级的矿池
+        // 尝试连接最高优先级的启用矿池
         for (pool_id, _) in pool_priorities {
             if let Some(stratum_client) = stratum_clients.get(&pool_id) {
                 match self.connect_single_pool(pool_id, stratum_client.clone()).await {
@@ -502,6 +505,7 @@ impl PoolManager {
     /// 启动心跳任务
     async fn start_heartbeat(&self) -> Result<(), PoolError> {
         let running = self.running.clone();
+        let pools = self.pools.clone();
         let stratum_clients = self.stratum_clients.clone();
 
         let handle = tokio::spawn(async move {
@@ -510,12 +514,26 @@ impl PoolManager {
             while *running.read().await {
                 interval.tick().await;
 
-                // 发送心跳到所有连接的矿池
+                // 只对启用的矿池发送心跳
+                let pools_guard = pools.read().await;
                 let clients = stratum_clients.read().await;
+
                 for (pool_id, client) in clients.iter() {
+                    // 检查矿池是否启用
+                    if let Some(pool) = pools_guard.get(pool_id) {
+                        let pool_guard = pool.lock().await;
+                        if !pool_guard.enabled {
+                            debug!("Skipping heartbeat for disabled pool {}", pool_id);
+                            continue;
+                        }
+                        drop(pool_guard); // 释放锁
+                    }
+
                     if let Ok(mut client) = client.try_lock() {
                         if let Err(e) = client.ping().await {
                             warn!("Heartbeat failed for pool {}: {}", pool_id, e);
+                        } else {
+                            debug!("Heartbeat sent successfully to pool {}", pool_id);
                         }
                     }
                 }

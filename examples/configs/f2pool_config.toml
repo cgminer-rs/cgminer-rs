@@ -40,16 +40,16 @@ retry_interval = 5
 [pools.virtual]
 [[pools.virtual.pools]]
 url = "stratum+tcp://btc-asia.f2pool.com:1314"
-user = "demo_user.worker1"
-password = "x"
+user = "kayuii.bbt"
+password = "21235365876986800"
 priority = 1
 enabled = true
 description = "F2Pool 亚洲服务器"
 
 [[pools.virtual.pools]]
 url = "stratum+tcp://btc.f2pool.com:1314"
-user = "demo_user.worker1"
-password = "x"
+user = "kayuii.bbt"
+password = "21235365876986800"
 priority = 2
 enabled = true
 description = "F2Pool 备用服务器"

@@ -98,6 +98,10 @@ harness = false
 name = "cgminer-rs"
 path = "src/main.rs"
 
+[[bin]]
+name = "test-stratum-connection"
+path = "src/bin/test_stratum_connection.rs"
+
 [profile.release]
 lto = true
 codegen-units = 1

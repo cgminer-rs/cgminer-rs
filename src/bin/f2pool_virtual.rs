@@ -345,21 +345,21 @@ impl F2PoolVirtualMiner {
         let pools = vec![
             PoolConfig {
                 url: "stratum+tcp://btc.f2pool.com:1314".to_string(),
-                user: "kayuii.001".to_string(),
+                user: "kayuii.bbt".to_string(),
                 password: "21235365876986800".to_string(),
                 priority: 1,
                 enabled: true,
             },
             PoolConfig {
                 url: "stratum+tcp://btc-asia.f2pool.com:1314".to_string(),
-                user: "kayuii.001".to_string(),
+                user: "kayuii.bbt".to_string(),
                 password: "21235365876986800".to_string(),
                 priority: 2,
                 enabled: true,
             },
             PoolConfig {
                 url: "stratum+tcp://btc-euro.f2pool.com:1314".to_string(),
-                user: "kayuii.001".to_string(),
+                user: "kayuii.bbt".to_string(),
                 password: "21235365876986800".to_string(),
                 priority: 3,
                 enabled: true,

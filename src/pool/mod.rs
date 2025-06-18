@@ -33,7 +33,7 @@ pub struct Pool {
 }
 
 impl Pool {
-    pub fn new(id: u32, url: String, user: String, password: String, priority: u8) -> Self {
+    pub fn new(id: u32, url: String, user: String, password: String, priority: u8, enabled: bool) -> Self {
         Self {
             id,
             url,
@@ -41,7 +41,7 @@ impl Pool {
             password,
             priority,
             quota: None,
-            enabled: true,
+            enabled,
             status: PoolStatus::Disconnected,
             connected_at: None,
             last_share_time: None,
@@ -52,11 +52,11 @@ impl Pool {
             ping: None,
         }
     }
-    
+
     pub fn is_connected(&self) -> bool {
         matches!(self.status, PoolStatus::Connected)
     }
-    
+
     pub fn get_accept_rate(&self) -> f64 {
         let total = self.accepted_shares + self.rejected_shares;
         if total == 0 {
@@ -65,7 +65,7 @@ impl Pool {
             self.accepted_shares as f64 / total as f64 * 100.0
         }
     }
-    
+
     pub fn get_reject_rate(&self) -> f64 {
         let total = self.accepted_shares + self.rejected_shares;
         if total == 0 {
@@ -74,7 +74,7 @@ impl Pool {
             self.rejected_shares as f64 / total as f64 * 100.0
         }
     }
-    
+
     pub fn record_accepted_share(&mut self, difficulty: f64) {
         self.accepted_shares += 1;
         self.last_share_time = Some(SystemTime::now());
@@ -82,11 +82,11 @@ impl Pool {
             self.difficulty = difficulty;
         }
     }
-    
+
     pub fn record_rejected_share(&mut self) {
         self.rejected_shares += 1;
     }
-    
+
     pub fn record_stale_share(&mut self) {
         self.stale_shares += 1;
     }
@@ -162,17 +162,17 @@ impl Share {
             status: ShareStatus::Pending,
         }
     }
-    
+
     pub fn mark_accepted(mut self) -> Self {
         self.status = ShareStatus::Accepted;
         self
     }
-    
+
     pub fn mark_rejected(mut self, reason: String) -> Self {
         self.status = ShareStatus::Rejected(reason);
         self
     }
-    
+
     pub fn mark_stale(mut self) -> Self {
         self.status = ShareStatus::Stale;
         self
@@ -217,11 +217,11 @@ impl PoolStats {
             ..Default::default()
         }
     }
-    
+
     pub fn record_share(&mut self, share: &Share) {
         self.total_shares += 1;
         self.last_share_time = Some(share.timestamp);
-        
+
         match &share.status {
             ShareStatus::Accepted => {
                 self.accepted_shares += 1;
@@ -233,25 +233,25 @@ impl PoolStats {
             ShareStatus::Stale => self.stale_shares += 1,
             ShareStatus::Pending => {}
         }
-        
+
         // 更新平均难度
         if self.total_shares > 0 {
             self.average_difficulty = (self.average_difficulty * (self.total_shares - 1) as f64 + share.difficulty) / self.total_shares as f64;
         }
     }
-    
+
     pub fn record_connection_attempt(&mut self) {
         self.connection_attempts += 1;
     }
-    
+
     pub fn record_disconnection(&mut self) {
         self.disconnection_count += 1;
     }
-    
+
     pub fn record_error(&mut self, error: String) {
         self.last_error = Some(error);
     }
-    
+
     pub fn get_accept_rate(&self) -> f64 {
         if self.total_shares == 0 {
             0.0
@@ -259,7 +259,7 @@ impl PoolStats {
             self.accepted_shares as f64 / self.total_shares as f64 * 100.0
         }
     }
-    
+
     pub fn get_reject_rate(&self) -> f64 {
         if self.total_shares == 0 {
             0.0
@@ -267,7 +267,7 @@ impl PoolStats {
             self.rejected_shares as f64 / self.total_shares as f64 * 100.0
         }
     }
-    
+
     pub fn get_stale_rate(&self) -> f64 {
         if self.total_shares == 0 {
             0.0
@@ -333,7 +333,7 @@ impl PoolEvent {
             PoolEvent::Error { timestamp, .. } => *timestamp,
         }
     }
-    
+
     pub fn pool_id(&self) -> u32 {
         match self {
             PoolEvent::ConnectionChanged { pool_id, .. } => *pool_id,

@@ -105,82 +105,9 @@ temperature_warning = 80.0
 temperature_critical = 90.0
 hashrate_drop_percent = 20.0
 error_rate_percent = 5.0
-power_limit_watts = 3500.0
-
-[advanced]
-work_queue_size = 1000
-result_queue_size = 1000
-batch_size = 100
-worker_threads = 0  # 自动检测
-network_timeout = 30
-reconnect_interval = 5
-max_reconnect_attempts = 10
-
-[security]
-enable_tls = false
-# cert_file = "/etc/cgminer-rs/server.crt"
-# key_file = "/etc/cgminer-rs/server.key"
-# allowed_ips = ["192.168.1.0/24", "10.0.0.0/8"]
-
-[logging]
-format = "text"
-rotation = "daily"
-max_files = 7
-max_size = "100MB"
-
-[logging.targets]
-console = false  # 生产环境通常不输出到控制台
-file = true
-syslog = true    # 生产环境建议使用 syslog
-
-[performance]
-memory_pool_size = 64
-zero_copy = true
-batch_processing = true
-io_buffer_size = 64
-
-[hardware]
-spi_speed = 1000000
-uart_baudrate = 115200
-
-[hardware.gpio]
-# reset_pin = 18
-# power_pin = 19
-# led_pin = 20
-
-[hardware.pwm]
-# fan_channel = 0
-# fan_frequency = 25000
-
-[hardware.temperature]
-# sensor_type = "lm75"
-# i2c_address = 0x48
-# update_interval = 5
-
-[web_ui]
-enabled = true
-port = 8080
-static_files_path = "./web"
-auth_required = true  # 生产环境建议启用认证
-
-[database]
-enabled = true
-type = "sqlite"
-path = "/var/lib/cgminer-rs/data.db"
-retention_days = 30
-
-[notifications]
-enabled = true
-
-[notifications.email]
-enabled = true
-smtp_server = "smtp.example.com"
-smtp_port = 587
-username = "your-email@example.com"
-password = "your-email-password"
-to_addresses = ["admin@example.com"]
-
-[notifications.webhook]
-enabled = false
-url = "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
-timeout = 10
+max_temperature = 85.0
+max_cpu_usage = 80.0
+max_memory_usage = 90.0
+max_device_temperature = 85.0
+max_error_rate = 5.0
+min_hashrate = 100.0

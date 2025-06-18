@@ -39,8 +39,10 @@ pub struct StratumClient {
     username: String,
     /// 密码
     password: String,
-    /// TCP连接
-    stream: Arc<Mutex<Option<TcpStream>>>,
+    /// TCP连接 - 写入部分
+    writer: Arc<Mutex<Option<tokio::net::tcp::OwnedWriteHalf>>>,
+    /// TCP连接 - 读取部分
+    reader: Arc<Mutex<Option<tokio::net::tcp::OwnedReadHalf>>>,
     /// 连接状态
     connected: Arc<RwLock<bool>>,
     /// 订阅ID
@@ -80,7 +82,8 @@ impl StratumClient {
             url,
             username,
             password,
-            stream: Arc::new(Mutex::new(None)),
+            writer: Arc::new(Mutex::new(None)),
+            reader: Arc::new(Mutex::new(None)),
             connected: Arc::new(RwLock::new(false)),
             subscription_id: Arc::new(RwLock::new(None)),
             extra_nonce1: Arc::new(RwLock::new(None)),
@@ -114,7 +117,10 @@ impl StratumClient {
             }
         };
 
-        *self.stream.lock().await = Some(stream);
+        // 分离读写流
+        let (reader, writer) = stream.into_split();
+        *self.reader.lock().await = Some(reader);
+        *self.writer.lock().await = Some(writer);
         *self.connected.write().await = true;
 
         // 启动消息处理循环
@@ -136,8 +142,12 @@ impl StratumClient {
 
         *self.connected.write().await = false;
 
-        if let Some(stream) = self.stream.lock().await.take() {
-            drop(stream);
+        // 关闭读写流
+        if let Some(reader) = self.reader.lock().await.take() {
+            drop(reader);
+        }
+        if let Some(writer) = self.writer.lock().await.take() {
+            drop(writer);
         }
 
         // 清理状态
@@ -365,21 +375,21 @@ impl StratumClient {
                 error: format!("JSON serialization error: {}", e),
             })?;
 
-        let mut stream_guard = self.stream.lock().await;
-        if let Some(stream) = stream_guard.as_mut() {
-            stream.write_all(json_str.as_bytes()).await
+        let mut writer_guard = self.writer.lock().await;
+        if let Some(writer) = writer_guard.as_mut() {
+            writer.write_all(json_str.as_bytes()).await
                 .map_err(|e| PoolError::ConnectionFailed {
                     url: self.url.clone(),
                     error: e.to_string(),
                 })?;
 
-            stream.write_all(b"\n").await
+            writer.write_all(b"\n").await
                 .map_err(|e| PoolError::ConnectionFailed {
                     url: self.url.clone(),
                     error: e.to_string(),
                 })?;
 
-            stream.flush().await
+            writer.flush().await
                 .map_err(|e| PoolError::ConnectionFailed {
                     url: self.url.clone(),
                     error: e.to_string(),
@@ -397,22 +407,27 @@ impl StratumClient {
 
     /// 启动消息处理循环
     async fn start_message_loop(&self) -> Result<(), PoolError> {
-        let stream = self.stream.clone();
+        let reader = self.reader.clone();
         let connected = self.connected.clone();
         let pending_requests = self.pending_requests.clone();
         let current_job = self.current_job.clone();
         let difficulty = self.difficulty.clone();
 
         tokio::spawn(async move {
-            let mut stream_guard = stream.lock().await;
-            if let Some(stream) = stream_guard.take() {
-                let mut reader = BufReader::new(stream);
+            // 获取读取流
+            let reader_stream = {
+                let mut reader_guard = reader.lock().await;
+                reader_guard.take()
+            };
+
+            if let Some(reader_stream) = reader_stream {
+                let mut buf_reader = BufReader::new(reader_stream);
                 let mut line = String::new();
 
                 while *connected.read().await {
                     line.clear();
 
-                    match reader.read_line(&mut line).await {
+                    match buf_reader.read_line(&mut line).await {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             if let Ok(message) = serde_json::from_str::<StratumMessage>(&line.trim()) {

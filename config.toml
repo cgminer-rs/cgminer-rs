@@ -1,6 +1,6 @@
-# Basic CGMiner-RS Configuration
-# This is a minimal configuration for getting started with CGMiner-RS
-# 适用于软算法核心 (Software Core) 的基础配置
+# CGMiner-RS 默认配置文件
+# 这是项目的默认配置文件，提供基本的挖矿配置
+# 详细配置说明请参考: docs/configuration.md
 
 [general]
 # 日志级别: trace, debug, info, warn, error
@@ -19,31 +19,42 @@ work_restart_timeout = 60
 scan_time = 30
 
 # =============================================================================
-# 核心配置 (软算法核心配置)
+# 核心配置 (默认使用软算法核心)
 # =============================================================================
 [cores]
-# 启用的核心类型列表 - 软算法核心适合Mac环境和开发测试
+# 启用的核心列表 - 默认使用软算法核心
 enabled_cores = ["software"]
 
-# 默认使用的核心类型
+# 默认核心
 default_core = "software"
 
-# 软算法核心配置 (用于CPU挖矿和开发测试)
+# 软算法核心配置
 [cores.software_core]
-enabled = true               # 启用软算法核心
-device_count = 1            # 基础配置使用单个设备
-cpu_threads = 0             # 0 = 自动检测CPU核心数
-cpu_affinity = true         # 启用CPU亲和性绑定
-algorithm = "sha256d"       # 使用SHA256d算法
-target_hashrate = 50.0      # 目标算力 (MH/s)
-batch_size = 100000         # 批处理大小
+enabled = true
+device_count = 4             # 默认设备数量
+min_hashrate = 500000000.0   # 最小算力: 500 MH/s
+max_hashrate = 2000000000.0  # 最大算力: 2 GH/s
+error_rate = 0.005           # 错误率: 0.5%
+batch_size = 2000            # 批处理大小
+work_timeout_ms = 3000       # 工作超时: 3秒
 
-# ASIC核心配置 (基础配置中禁用)
+# CPU绑定配置
+[cores.software_core.cpu_affinity]
+enabled = true               # 启用CPU绑定
+strategy = "round_robin"     # 绑定策略
+
+# ASIC核心配置 (默认禁用)
 [cores.asic_core]
-enabled = false             # 基础配置禁用ASIC核心
+enabled = false
+chain_count = 3
+spi_speed = 6000000
+uart_baud = 115200
+auto_detect = true
+power_limit = 3000.0
+cooling_mode = "auto"
 
 # =============================================================================
-# 设备配置 (软算法核心设备配置)
+# 设备配置
 # =============================================================================
 [devices]
 # 自动检测设备
@@ -51,67 +62,56 @@ auto_detect = true
 # 设备扫描间隔 (秒)
 scan_interval = 10
 
-# 软算法设备配置
-[devices.software]
+# 虚拟设备链配置
+[[devices.chains]]
+id = 0
 enabled = true
-device_count = 1            # 基础配置使用单个设备
+frequency = 600
+voltage = 900
+auto_tune = false
+chip_count = 1
 
-[devices.software.config]
-frequency = 600             # 软算法频率设置
-voltage = 900              # 软算法电压设置
-auto_tune = true           # 启用自动调优
-chip_count = 64            # 虚拟芯片数量
-temperature_limit = 80.0   # 温度限制
-fan_speed = 50             # 风扇速度
-
-[devices.software.mining]
-min_hashrate = 30.0        # 最小算力 (MH/s)
-max_hashrate = 80.0        # 最大算力 (MH/s)
-error_rate = 0.1           # 错误率 (%)
-min_temperature = 40.0     # 最小温度
-max_temperature = 70.0     # 最大温度
-batch_size = 100000        # 批处理大小
-
-# ASIC设备配置 (基础配置中禁用)
-[devices.asic]
-enabled = false
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 600
+voltage = 900
+auto_tune = false
+chip_count = 1
 
 # =============================================================================
 # 矿池配置
 # =============================================================================
 [pools]
-# 使用故障转移策略 - 主矿池和备用矿池
-strategy = "failover"
+# 矿池策略: Failover, RoundRobin, LoadBalance, Quota
+strategy = "Failover"
 
 # 故障转移超时时间 (秒)
 failover_timeout = 30
 
 # 重试间隔 (秒)
-retry_interval = 30
+retry_interval = 10
 
-# F2Pool 矿池配置 - 适用于软算法核心
+# F2Pool 矿池配置
 [[pools.pools]]
 url = "stratum+tcp://btc.f2pool.com:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 1
 enabled = true
-description = "F2Pool 主矿池"
 
-# F2Pool 亚洲备用矿池
 [[pools.pools]]
 url = "stratum+tcp://btc-asia.f2pool.com:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 2
 enabled = true
-description = "F2Pool 亚洲备用矿池"
 
 [api]
 # 启用 API 服务器
 enabled = true
 
-# 绑定地址 (基础配置仅本地访问)
+# 绑定地址
 bind_address = "127.0.0.1"
 
 # API 端口
@@ -119,9 +119,6 @@ port = 4028
 
 # 允许的来源 (CORS)
 allow_origins = ["*"]
-
-# 认证令牌 (基础配置可选)
-# auth_token = "your-secret-token-here"
 
 [monitoring]
 # 启用监控系统
@@ -151,4 +148,4 @@ max_cpu_usage = 80.0
 max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
-min_hashrate = 30.0
+min_hashrate = 50.0

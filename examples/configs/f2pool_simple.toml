@@ -34,21 +34,21 @@ retry_interval = 10
 
 [[pools.pools]]
 url = "stratum+tcp://btc.f2pool.com:1314"
-user = "kayuii.001"
+user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 1
 enabled = true
 
 [[pools.pools]]
 url = "stratum+tcp://btc-asia.f2pool.com:1314"
-user = "kayuii.001"
+user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 2
 enabled = true
 
 [[pools.pools]]
 url = "stratum+tcp://btc-euro.f2pool.com:1314"
-user = "kayuii.001"
+user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 3
 enabled = true

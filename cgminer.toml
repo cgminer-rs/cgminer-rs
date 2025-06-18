@@ -52,17 +52,19 @@ default_core = "software"
 # - 支持CPU绑定，避免线程切换提升性能
 [cores.software_core]
 enabled = true
-device_count = 8             # 软算法设备数量 (建议4-16个)
-min_hashrate = 500000000.0   # 最小算力: 500 MH/s
-max_hashrate = 2000000000.0  # 最大算力: 2 GH/s (适合CPU挖矿)
-error_rate = 0.005           # 错误率: 0.5% (更低的错误率)
-batch_size = 2000            # 批处理大小 (增加效率)
-work_timeout_ms = 3000       # 工作超时: 3秒
+device_count = 32            # 增加软算法设备数量以提高总算力
+min_hashrate = 2000000000.0  # 最小算力: 2 GH/s
+max_hashrate = 8000000000.0  # 最大算力: 8 GH/s (高性能CPU挖矿)
+error_rate = 0.002           # 错误率: 0.2% (更低的错误率)
+batch_size = 4000            # 增大批处理大小提高效率
+work_timeout_ms = 2000       # 减少工作超时提高响应速度
 
 # CPU绑定配置 - 提升挖矿性能和稳定性
 [cores.software_core.cpu_affinity]
 enabled = true               # 启用CPU绑定
-strategy = "round_robin"     # 绑定策略: round_robin, manual, performance_first, physical_only
+strategy = "performance_first" # 性能优先策略，优先使用高性能核心
+avoid_hyperthreading = false  # 允许使用超线程提高并发
+prefer_performance_cores = true # 优先使用性能核心
 # manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
 
 # ASIC核心配置 (用于实际ASIC硬件设备)
@@ -120,7 +122,7 @@ retry_interval = 10
 # 矿池列表 - F2Pool 配置 (适配软算法核心)
 # F2Pool支持软算法核心产生的真实份额提交
 [[pools.pools]]
-url = "stratum+tcp://btc.f2pool.com:1314"
+url = "stratum+tcp://192.168.18.240:10203"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 1
@@ -131,14 +133,14 @@ url = "stratum+tcp://btc-asia.f2pool.com:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 2
-enabled = true
+enabled = false
 
 [[pools.pools]]
 url = "stratum+tcp://btc-euro.f2pool.com:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 3
-enabled = true
+enabled = false
 
 [api]
 # 启用 API 服务器
@@ -184,4 +186,4 @@ max_cpu_usage = 80.0
 max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
-min_hashrate = 50.0
+min_hashrate = 1.5  # 调整为1.5 GH/s，适合软算法核心的实际性能

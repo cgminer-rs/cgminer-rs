@@ -93,16 +93,17 @@ impl AsicMiningCore {
             let device_config = if (i as usize) < config.devices.len() {
                 config.devices[i as usize].clone()
             } else {
-                cgminer_core::DeviceConfig {
-                    chain_id: i as u8,
-                    enabled: true,
-                    frequency: 650,
-                    voltage: 900,
-                    auto_tune: true,
-                    chip_count: 126, // Maijie L7 典型芯片数量
-                    temperature_limit: 85.0,
-                    fan_speed: Some(70),
-                }
+                // 使用默认配置，但确保enabled状态来自配置
+                let mut default_config = cgminer_core::DeviceConfig::default();
+                default_config.chain_id = i as u8;
+                default_config.frequency = 650;
+                default_config.voltage = 900;
+                default_config.auto_tune = true;
+                default_config.chip_count = 126; // Maijie L7 典型芯片数量
+                default_config.temperature_limit = 85.0;
+                default_config.fan_speed = Some(70);
+                // enabled状态保持默认值，不硬编码
+                default_config
             };
 
             let device_info = DeviceInfo::new(

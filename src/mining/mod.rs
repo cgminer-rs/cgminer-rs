@@ -1,5 +1,6 @@
 pub mod manager;
 pub mod work_queue;
+pub mod hashmeter;
 
 use crate::config::Config;
 use crate::error::MiningError;
@@ -14,6 +15,7 @@ use uuid::Uuid;
 
 pub use manager::MiningManager;
 pub use work_queue::{WorkQueue, WorkQueueManager};
+pub use hashmeter::{Hashmeter, HashmeterConfig, HashrateStats, DeviceHashrateStats};
 
 /// 挖矿状态
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

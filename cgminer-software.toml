@@ -1,5 +1,5 @@
-# CGMiner-RS 虚拟设备测试配置
-# 此配置专门用于虚拟设备测试和开发
+# CGMiner-RS 软算法核心测试配置
+# 此配置专门用于软算法核心测试和开发
 
 [general]
 log_level = "debug"  # 测试时使用详细日志
@@ -7,52 +7,80 @@ log_file = "/tmp/cgminer-virtual.log"
 pid_file = "/tmp/cgminer-virtual.pid"
 work_restart_timeout = 30  # 测试时使用较短超时
 scan_time = 10  # 测试时更频繁扫描
-device_mode = "virtual"  # 仅使用虚拟设备
 
-[devices.virtual]
+[cores]
+# 启用的核心类型列表 - 仅软算法核心
+enabled_cores = ["software"]
+
+# 默认使用的核心类型
+default_core = "software"
+
+# 软算法核心配置 (专门用于测试和开发)
+[cores.software_core]
 enabled = true
-device_count = 2  # 测试时使用较少设备
+device_count = 2            # 测试时使用较少设备
+min_hashrate = 100000000.0  # 最小算力: 100 MH/s (测试用)
+max_hashrate = 500000000.0  # 最大算力: 500 MH/s (测试用)
+error_rate = 0.01           # 错误率: 1% (测试时允许更高错误率)
+batch_size = 1000           # 批处理大小 (测试用较小值)
+work_timeout_ms = 5000      # 工作超时: 5秒 (测试时更长)
 
-[devices.virtual.config]
+# CPU绑定配置 - 测试环境
+[cores.software_core.cpu_affinity]
+enabled = true              # 测试时也启用CPU绑定
+strategy = "round_robin"    # 轮询策略适合测试
+# manual_mapping = { 0 = 0, 1 = 1 }  # 测试时可以手动指定
+
+# ASIC核心配置 (测试时禁用)
+[cores.asic_core]
+enabled = false
+chain_count = 3
+spi_speed = 6000000
+uart_baud = 115200
+auto_detect = false
+power_limit = 1000.0
+cooling_mode = "manual"
+
+[devices]
+auto_detect = true
+scan_interval = 5  # 测试时更频繁扫描
+
+# 测试用虚拟设备链
+[[devices.chains]]
+id = 0
+enabled = true
 frequency = 600
 voltage = 900
 auto_tune = false
-chip_count = 64
-temperature_limit = 80.0
-fan_speed = 50
+chip_count = 1
 
-[devices.virtual.mining]
-min_hashrate = 30.0
-max_hashrate = 100.0
-error_rate = 0.5  # 测试时模拟更多错误
-min_temperature = 35.0
-max_temperature = 65.0
-batch_size = 100000  # 测试时使用较小批次
-
-[devices.asic]
-enabled = false  # 禁用 ASIC 设备
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 600
+voltage = 900
+auto_tune = false
+chip_count = 1
 
 [pools]
-strategy = "failover"
+strategy = "Failover"
 failover_timeout = 15  # 测试时使用较短超时
 retry_interval = 5
 
-[pools.virtual]
-[[pools.virtual.pools]]
-url = "stratum+tcp://testnet.pool.example.com:4444"
-user = "test_user.virtual_worker"
-password = "test_password"
+# 测试矿池配置
+[[pools.pools]]
+url = "stratum+tcp://btc.f2pool.com:1314"
+user = "kayuii.bbt"
+password = "21235365876986800"
 priority = 1
 enabled = true
-description = "测试网络矿池"
 
-[[pools.virtual.pools]]
+[[pools.pools]]
 url = "stratum+tcp://localhost:3333"
-user = "local_test.virtual"
+user = "test_user.virtual"
 password = "test"
 priority = 2
-enabled = true  # 测试时启用本地矿池
-description = "本地测试矿池"
+enabled = false  # 本地测试矿池默认禁用
 
 [api]
 enabled = true
@@ -70,45 +98,9 @@ temperature_warning = 60.0  # 测试时使用较低阈值
 temperature_critical = 70.0
 hashrate_drop_percent = 30.0
 error_rate_percent = 10.0  # 测试时允许更高错误率
-power_limit_watts = 1000.0
-
-[advanced]
-work_queue_size = 100  # 测试时使用较小队列
-result_queue_size = 100
-batch_size = 10
-worker_threads = 2  # 测试时使用较少线程
-network_timeout = 15
-reconnect_interval = 3
-max_reconnect_attempts = 5
-
-[logging]
-format = "text"
-rotation = "hourly"  # 测试时更频繁轮转
-max_files = 3
-max_size = "10MB"
-
-[logging.targets]
-console = true
-file = true
-syslog = false
-
-[performance]
-memory_pool_size = 16  # 测试时使用较少内存
-zero_copy = true
-batch_processing = true
-io_buffer_size = 32
-
-[web_ui]
-enabled = true  # 测试时启用 Web UI
-port = 8080
-static_files_path = "./web"
-auth_required = false
-
-[database]
-enabled = true  # 测试时启用数据库
-type = "sqlite"
-path = "/tmp/cgminer-virtual.db"
-retention_days = 7  # 测试时保留较短时间
-
-[notifications]
-enabled = false  # 测试时禁用通知
+max_temperature = 75.0
+max_cpu_usage = 85.0
+max_memory_usage = 80.0
+max_device_temperature = 75.0
+max_error_rate = 10.0
+min_hashrate = 30.0
