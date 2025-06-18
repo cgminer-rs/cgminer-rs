@@ -30,6 +30,7 @@ pub struct Args {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub general: GeneralConfig,
+    pub cores: CoresConfig,
     pub devices: DeviceConfig,
     pub pools: PoolConfig,
     pub api: ApiConfig,
@@ -43,6 +44,36 @@ pub struct GeneralConfig {
     pub pid_file: Option<PathBuf>,
     pub work_restart_timeout: u64,
     pub scan_time: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CoresConfig {
+    pub enabled_cores: Vec<String>,
+    pub default_core: String,
+    pub software_core: Option<SoftwareCoreConfig>,
+    pub asic_core: Option<AsicCoreConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SoftwareCoreConfig {
+    pub enabled: bool,
+    pub device_count: u32,
+    pub min_hashrate: f64,
+    pub max_hashrate: f64,
+    pub error_rate: f64,
+    pub batch_size: u32,
+    pub work_timeout_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AsicCoreConfig {
+    pub enabled: bool,
+    pub chain_count: u32,
+    pub spi_speed: u32,
+    pub uart_baud: u32,
+    pub auto_detect: bool,
+    pub power_limit: f64,
+    pub cooling_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +159,28 @@ impl Default for Config {
                 pid_file: Some(PathBuf::from("/tmp/cgminer-rs.pid")),
                 work_restart_timeout: 60,
                 scan_time: 30,
+            },
+            cores: CoresConfig {
+                enabled_cores: vec!["software".to_string()],
+                default_core: "software".to_string(),
+                software_core: Some(SoftwareCoreConfig {
+                    enabled: true,
+                    device_count: 4,
+                    min_hashrate: 1_000_000_000.0, // 1 GH/s
+                    max_hashrate: 5_000_000_000.0, // 5 GH/s
+                    error_rate: 0.01, // 1%
+                    batch_size: 1000,
+                    work_timeout_ms: 5000,
+                }),
+                asic_core: Some(AsicCoreConfig {
+                    enabled: false,
+                    chain_count: 3,
+                    spi_speed: 6_000_000, // 6MHz
+                    uart_baud: 115200,
+                    auto_detect: true,
+                    power_limit: 3000.0, // 3kW
+                    cooling_mode: "auto".to_string(),
+                }),
             },
             devices: DeviceConfig {
                 auto_detect: true,
@@ -218,6 +271,52 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
+        // 验证核心配置
+        if self.cores.enabled_cores.is_empty() {
+            anyhow::bail!("At least one core must be enabled");
+        }
+
+        if !self.cores.enabled_cores.contains(&self.cores.default_core) {
+            anyhow::bail!("Default core '{}' must be in enabled cores list", self.cores.default_core);
+        }
+
+        // 验证软算法核心配置
+        if let Some(software_config) = &self.cores.software_core {
+            if software_config.enabled {
+                if software_config.device_count == 0 {
+                    anyhow::bail!("Software core device count must be greater than 0");
+                }
+                if software_config.device_count > 100 {
+                    anyhow::bail!("Software core device count cannot exceed 100");
+                }
+                if software_config.min_hashrate >= software_config.max_hashrate {
+                    anyhow::bail!("Software core min_hashrate must be less than max_hashrate");
+                }
+                if software_config.error_rate < 0.0 || software_config.error_rate > 1.0 {
+                    anyhow::bail!("Software core error_rate must be between 0.0 and 1.0");
+                }
+            }
+        }
+
+        // 验证ASIC核心配置
+        if let Some(asic_config) = &self.cores.asic_core {
+            if asic_config.enabled {
+                if asic_config.chain_count == 0 {
+                    anyhow::bail!("ASIC core chain count must be greater than 0");
+                }
+                if asic_config.chain_count > 16 {
+                    anyhow::bail!("ASIC core chain count cannot exceed 16");
+                }
+                if asic_config.spi_speed == 0 || asic_config.spi_speed > 50_000_000 {
+                    anyhow::bail!("ASIC core SPI speed must be between 1 and 50,000,000 Hz");
+                }
+                let valid_bauds = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
+                if !valid_bauds.contains(&asic_config.uart_baud) {
+                    anyhow::bail!("ASIC core UART baud rate must be a standard value");
+                }
+            }
+        }
+
         // 验证矿池配置
         if self.pools.pools.is_empty() {
             anyhow::bail!("At least one pool must be configured");

@@ -1,3 +1,10 @@
+[workspace]
+members = [
+    "cgminer-core",
+    "cgminer-software-core",
+    "cgminer-asic-core"
+]
+
 [package]
 name = "cgminer-rs"
 version = "0.1.0"
@@ -10,6 +17,11 @@ keywords = ["bitcoin", "mining", "asic", "cryptocurrency"]
 categories = ["hardware-support", "network-programming"]
 
 [dependencies]
+# Core libraries
+cgminer-core = { path = "cgminer-core" }
+cgminer-software-core = { path = "cgminer-software-core", optional = true }
+cgminer-asic-core = { path = "cgminer-asic-core", optional = true }
+
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
 futures = "0.3"
@@ -44,6 +56,7 @@ hex = "0.4"
 sha2 = "0.10"
 async-trait = "0.1"
 fastrand = "2.0"
+ctrlc = "3.4"
 
 # Hardware interface
 libc = "0.2"
@@ -57,6 +70,9 @@ axum = { version = "0.7", features = ["ws", "macros"] }
 tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
 futures-util = "0.3"
+
+# Dynamic library loading
+libloading = "0.8"
 
 [build-dependencies]
 cc = "1.0"
@@ -92,7 +108,9 @@ debug = true
 opt-level = 0
 
 [features]
-default = ["maijie-l7"]
-maijie-l7 = []
+default = ["software-core", "asic-core"]
+software-core = ["cgminer-software-core"]
+asic-core = ["cgminer-asic-core"]
+maijie-l7 = ["asic-core"]
 web-ui = []
 metrics = ["prometheus"]

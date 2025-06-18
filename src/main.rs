@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use std::sync::Arc;
-use tracing::{info, error};
+use tracing::{info, error, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 mod config;
@@ -11,10 +11,11 @@ mod pool;
 mod api;
 mod monitoring;
 mod error;
-mod ffi;
+mod core_loader;
 
 use config::{Config, Args};
 use mining::MiningManager;
+use core_loader::CoreLoader;
 
 #[tokio::main]
 async fn main() {
@@ -39,8 +40,32 @@ async fn main() {
     info!("🚀 Starting CGMiner-RS v{}", env!("CARGO_PKG_VERSION"));
     info!("📋 Configuration loaded from: {}", args.config);
 
+    // 创建核心加载器
+    let core_loader = CoreLoader::new();
+
+    // 加载所有可用的挖矿核心
+    if let Err(e) = core_loader.load_all_cores().await {
+        error!("❌ Failed to load mining cores: {}", e);
+        return;
+    }
+
+    // 显示加载的核心信息
+    match core_loader.get_load_stats() {
+        Ok(stats) => {
+            info!("📦 {}", stats);
+
+            // 列出所有已加载的核心
+            if let Ok(cores) = core_loader.list_loaded_cores() {
+                for core in cores {
+                    info!("  ✓ {} ({}): {}", core.name, core.core_type, core.description);
+                }
+            }
+        }
+        Err(e) => warn!("⚠️ Failed to get load stats: {}", e),
+    }
+
     // 创建挖矿管理器
-    let mining_manager = match MiningManager::new(config).await {
+    let mining_manager = match MiningManager::new(config, core_loader.registry()).await {
         Ok(manager) => Arc::new(manager),
         Err(e) => {
             error!("❌ Failed to create mining manager: {}", e);
@@ -49,7 +74,7 @@ async fn main() {
     };
 
     // 设置信号处理
-    if let Err(e) = setup_signal_handlers(mining_manager.clone()).await {
+    if let Err(e) = setup_signal_handlers(mining_manager.clone(), core_loader).await {
         error!("❌ Failed to setup signal handlers: {}", e);
         return;
     }
@@ -90,7 +115,7 @@ fn init_logging() -> Result<()> {
     Ok(())
 }
 
-async fn setup_signal_handlers(mining_manager: Arc<MiningManager>) -> anyhow::Result<()> {
+async fn setup_signal_handlers(mining_manager: Arc<MiningManager>, core_loader: CoreLoader) -> anyhow::Result<()> {
     let manager = mining_manager.clone();
     tokio::spawn(async move {
         #[cfg(unix)]
@@ -105,6 +130,12 @@ async fn setup_signal_handlers(mining_manager: Arc<MiningManager>) -> anyhow::Re
                     if let Err(e) = manager.stop().await {
                         error!("Error during graceful shutdown: {}", e);
                     }
+
+                    // 关闭所有核心
+                    if let Err(e) = core_loader.shutdown().await {
+                        error!("Error shutting down cores: {}", e);
+                    }
+
                     std::process::exit(0);
                 }
             }

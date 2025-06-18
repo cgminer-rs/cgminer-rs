@@ -5,6 +5,9 @@ pub enum MiningError {
     #[error("Device error: {0}")]
     Device(#[from] DeviceError),
 
+    #[error("Core error: {0}")]
+    CoreError(String),
+
     #[error("Pool error: {0}")]
     Pool(#[from] PoolError),
 

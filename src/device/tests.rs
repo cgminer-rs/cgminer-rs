@@ -10,7 +10,7 @@ mod tests {
 
     #[test]
     fn test_device_info_creation() {
-        let device_info = DeviceInfo::new(
+        let mut device_info = DeviceInfo::new(
             0,
             "Test Device".to_string(),
             "test-device".to_string(),
@@ -21,6 +21,12 @@ mod tests {
         assert_eq!(device_info.name, "Test Device");
         assert_eq!(device_info.device_type, "test-device");
         assert_eq!(device_info.chain_id, 0);
+
+        // 新创建的设备状态是 Uninitialized，不是健康状态
+        assert!(!device_info.is_healthy());
+
+        // 设置为 Idle 状态后应该是健康的
+        device_info.update_status(DeviceStatus::Idle);
         assert!(device_info.is_healthy());
     }
 
@@ -134,7 +140,12 @@ mod tests {
         assert_eq!(result.device_id, 0);
         assert_eq!(result.nonce, 0x12345678);
         assert_eq!(result.difficulty, 1024.0);
-        assert!(result.is_valid());
+        // 新创建的结果默认是无效的，需要验证后标记为有效
+        assert!(!result.is_valid);
+
+        // 标记为有效后应该是有效的
+        let valid_result = result.mark_valid();
+        assert!(valid_result.is_valid);
     }
 
     #[test]
@@ -566,10 +577,10 @@ mod tests {
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
         ];
 
-        // 低哈希应该满足目标
+        // 低哈希应该满足目标（0x01 < 0x10）
         assert!(VirtualDevice::hash_meets_target(&hash_low, &target));
 
         // 高哈希不应该满足目标

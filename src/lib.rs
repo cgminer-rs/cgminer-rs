@@ -5,19 +5,23 @@
 
 pub mod api;
 pub mod config;
+pub mod core_loader;
 pub mod device;
 pub mod error;
-pub mod ffi;
 pub mod mining;
 pub mod monitoring;
 pub mod pool;
 
 // Re-export commonly used types
+pub use core_loader::{CoreLoader, LoadStats};
 pub use device::{DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult};
 pub use device::{MiningDevice, DeviceDriver, DeviceManager};
 pub use error::{MiningError, DeviceError};
 pub use mining::{MiningManager, MiningState};
 pub use config::Config;
+
+// Re-export core types
+pub use cgminer_core::{CoreRegistry, CoreFactory, CoreType, CoreInfo, CoreError};
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
