@@ -365,7 +365,7 @@ impl ChainController for AsicChainController {
         }
 
         info!("Detected {} chips on chain {}", chip_count, self.chain_id);
-        Ok(chip_count)
+        Ok(chip_count as u32)
     }
 
     /// 设置PLL频率

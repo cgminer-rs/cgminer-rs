@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 pub use manager::DeviceManager;
-pub use chain::ChainController;
+pub use traits::ChainController;
 pub use traits::{MiningDevice, DeviceDriver};
 
 /// 设备状态枚举
@@ -150,7 +150,7 @@ impl DeviceInfo {
 }
 
 /// 工作数据结构
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Work {
     pub id: Uuid,
     pub job_id: String,

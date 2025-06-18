@@ -4,25 +4,25 @@ use thiserror::Error;
 pub enum MiningError {
     #[error("Device error: {0}")]
     Device(#[from] DeviceError),
-    
+
     #[error("Pool error: {0}")]
     Pool(#[from] PoolError),
-    
+
     #[error("Work error: {0}")]
     Work(#[from] WorkError),
-    
+
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),
-    
+
     #[error("Hardware error: {0}")]
     Hardware(String),
-    
+
     #[error("System error: {0}")]
     System(String),
-    
+
     #[error("Network error: {0}")]
     Network(#[from] NetworkError),
-    
+
     #[error("API error: {0}")]
     Api(#[from] ApiError),
 }
@@ -31,55 +31,55 @@ pub enum MiningError {
 pub enum DeviceError {
     #[error("Device not found: {device_id}")]
     NotFound { device_id: u32 },
-    
+
     #[error("Device initialization failed: {device_id}, reason: {reason}")]
     InitializationFailed { device_id: u32, reason: String },
-    
+
     #[error("Device communication error: {device_id}, error: {error}")]
     CommunicationError { device_id: u32, error: String },
-    
+
     #[error("Device overheated: {device_id}, temperature: {temperature}°C")]
     Overheated { device_id: u32, temperature: f32 },
-    
+
     #[error("Device hardware error: {device_id}, error_code: {error_code}")]
     HardwareError { device_id: u32, error_code: u32 },
-    
+
     #[error("Chain error: {chain_id}, error: {error}")]
     ChainError { chain_id: u8, error: String },
-    
+
     #[error("Chip error: {chain_id}, chip_id: {chip_id}, error: {error}")]
     ChipError { chain_id: u8, chip_id: u8, error: String },
-    
+
     #[error("Invalid configuration: {reason}")]
     InvalidConfig { reason: String },
-    
+
     #[error("Device timeout: {device_id}")]
     Timeout { device_id: u32 },
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PoolError {
     #[error("Connection failed: {url}, error: {error}")]
     ConnectionFailed { url: String, error: String },
-    
+
     #[error("Authentication failed: {url}")]
     AuthenticationFailed { url: String },
-    
+
     #[error("Protocol error: {url}, error: {error}")]
     ProtocolError { url: String, error: String },
-    
+
     #[error("No pools available")]
     NoPoolsAvailable,
-    
+
     #[error("Pool timeout: {url}")]
     Timeout { url: String },
-    
+
     #[error("Invalid pool URL: {url}")]
     InvalidUrl { url: String },
-    
+
     #[error("Share rejected: {reason}")]
     ShareRejected { reason: String },
-    
+
     #[error("Stratum error: {error_code}, message: {message}")]
     StratumError { error_code: i32, message: String },
 }
@@ -88,22 +88,22 @@ pub enum PoolError {
 pub enum WorkError {
     #[error("Work queue full")]
     QueueFull,
-    
+
     #[error("Work queue empty")]
     QueueEmpty,
-    
+
     #[error("Invalid work data: {reason}")]
     InvalidData { reason: String },
-    
+
     #[error("Work expired: {work_id}")]
     Expired { work_id: String },
-    
+
     #[error("Work not found: {work_id}")]
     NotFound { work_id: String },
-    
+
     #[error("Duplicate work: {work_id}")]
     Duplicate { work_id: String },
-    
+
     #[error("Work processing error: {error}")]
     ProcessingError { error: String },
 }
@@ -112,16 +112,16 @@ pub enum WorkError {
 pub enum ConfigError {
     #[error("File not found: {path}")]
     FileNotFound { path: String },
-    
+
     #[error("Parse error: {error}")]
     ParseError { error: String },
-    
+
     #[error("Validation error: {field}, reason: {reason}")]
     ValidationError { field: String, reason: String },
-    
+
     #[error("Missing required field: {field}")]
     MissingField { field: String },
-    
+
     #[error("Invalid value: {field}, value: {value}, reason: {reason}")]
     InvalidValue { field: String, value: String, reason: String },
 }
@@ -130,19 +130,19 @@ pub enum ConfigError {
 pub enum NetworkError {
     #[error("Connection timeout: {address}")]
     Timeout { address: String },
-    
+
     #[error("DNS resolution failed: {hostname}")]
     DnsResolutionFailed { hostname: String },
-    
+
     #[error("TLS error: {error}")]
     TlsError { error: String },
-    
+
     #[error("Socket error: {error}")]
     SocketError { error: String },
-    
+
     #[error("HTTP error: {status_code}, message: {message}")]
     HttpError { status_code: u16, message: String },
-    
+
     #[error("WebSocket error: {error}")]
     WebSocketError { error: String },
 }
@@ -151,22 +151,22 @@ pub enum NetworkError {
 pub enum ApiError {
     #[error("Server start failed: {error}")]
     ServerStartFailed { error: String },
-    
+
     #[error("Authentication required")]
     AuthenticationRequired,
-    
+
     #[error("Invalid request: {reason}")]
     InvalidRequest { reason: String },
-    
+
     #[error("Resource not found: {resource}")]
     ResourceNotFound { resource: String },
-    
+
     #[error("Method not allowed: {method}")]
     MethodNotAllowed { method: String },
-    
+
     #[error("Rate limit exceeded")]
     RateLimitExceeded,
-    
+
     #[error("Internal server error: {error}")]
     InternalError { error: String },
 }
@@ -240,7 +240,7 @@ pub struct ErrorStats {
 impl ErrorStats {
     pub fn record_error(&mut self, error: &MiningError) {
         self.total_errors += 1;
-        
+
         match error {
             MiningError::Device(_) => self.device_errors += 1,
             MiningError::Pool(_) => self.pool_errors += 1,
@@ -249,7 +249,7 @@ impl ErrorStats {
             _ => {}
         }
     }
-    
+
     pub fn reset(&mut self) {
         *self = Default::default();
     }

@@ -9,19 +9,19 @@ pub struct Args {
     /// Configuration file path
     #[arg(short, long, default_value = "cgminer.toml")]
     pub config: String,
-    
+
     /// Enable debug mode
     #[arg(short, long)]
     pub debug: bool,
-    
+
     /// API server port
     #[arg(long, default_value = "4028")]
     pub api_port: u16,
-    
+
     /// Disable API server
     #[arg(long)]
     pub no_api: bool,
-    
+
     /// Log level
     #[arg(long, default_value = "info")]
     pub log_level: String,
@@ -111,6 +111,12 @@ pub struct AlertThresholds {
     pub temperature_critical: f32,
     pub hashrate_drop_percent: f32,
     pub error_rate_percent: f32,
+    pub max_temperature: f32,
+    pub max_cpu_usage: f32,
+    pub max_memory_usage: f32,
+    pub max_device_temperature: f32,
+    pub max_error_rate: f32,
+    pub min_hashrate: f64,
 }
 
 impl Default for Config {
@@ -176,6 +182,12 @@ impl Default for Config {
                     temperature_critical: 90.0,
                     hashrate_drop_percent: 20.0,
                     error_rate_percent: 5.0,
+                    max_temperature: 85.0,
+                    max_cpu_usage: 80.0,
+                    max_memory_usage: 90.0,
+                    max_device_temperature: 85.0,
+                    max_error_rate: 5.0,
+                    min_hashrate: 50.0,
                 },
             },
         }
@@ -186,54 +198,54 @@ impl Config {
     pub fn load(path: &str) -> Result<Self> {
         let config_content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path))?;
-        
+
         let config: Config = toml::from_str(&config_content)
             .with_context(|| format!("Failed to parse config file: {}", path))?;
-        
+
         config.validate()?;
-        
+
         Ok(config)
     }
-    
+
     pub fn save(&self, path: &str) -> Result<()> {
         let config_content = toml::to_string_pretty(self)
             .context("Failed to serialize config")?;
-        
+
         std::fs::write(path, config_content)
             .with_context(|| format!("Failed to write config file: {}", path))?;
-        
+
         Ok(())
     }
-    
+
     pub fn validate(&self) -> Result<()> {
         // 验证矿池配置
         if self.pools.pools.is_empty() {
             anyhow::bail!("At least one pool must be configured");
         }
-        
+
         // 验证设备配置
         if self.devices.chains.is_empty() {
             anyhow::bail!("At least one chain must be configured");
         }
-        
+
         // 验证频率和电压范围
         for chain in &self.devices.chains {
             if chain.frequency < 100 || chain.frequency > 1000 {
-                anyhow::bail!("Chain {} frequency {} is out of range (100-1000)", 
+                anyhow::bail!("Chain {} frequency {} is out of range (100-1000)",
                     chain.id, chain.frequency);
             }
-            
+
             if chain.voltage < 600 || chain.voltage > 1000 {
-                anyhow::bail!("Chain {} voltage {} is out of range (600-1000)", 
+                anyhow::bail!("Chain {} voltage {} is out of range (600-1000)",
                     chain.id, chain.voltage);
             }
         }
-        
+
         // 验证API配置
         if self.api.port < 1024 || self.api.port > 65535 {
             anyhow::bail!("API port {} is out of range (1024-65535)", self.api.port);
         }
-        
+
         Ok(())
     }
 }

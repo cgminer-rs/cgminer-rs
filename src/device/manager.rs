@@ -2,7 +2,7 @@ use crate::config::{DeviceConfig, ChainConfig};
 use crate::error::{DeviceError, MiningError};
 use crate::device::{
     DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult,
-    MiningDevice, DeviceDriver, ChainController
+    MiningDevice, DeviceDriver
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -49,32 +49,32 @@ impl DeviceManager {
             running: Arc::new(RwLock::new(false)),
         }
     }
-    
+
     /// 注册设备驱动
     pub fn register_driver(&mut self, driver: Box<dyn DeviceDriver>) {
         info!("Registering device driver: {}", driver.driver_name());
         self.drivers.push(driver);
     }
-    
+
     /// 初始化设备管理器
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
         info!("Initializing device manager");
-        
+
         // 扫描设备
         self.scan_devices().await?;
-        
+
         // 初始化所有设备
         self.initialize_devices().await?;
-        
+
         info!("Device manager initialized successfully");
         Ok(())
     }
-    
+
     /// 扫描设备
     pub async fn scan_devices(&mut self) -> Result<Vec<DeviceInfo>, DeviceError> {
         info!("Scanning for devices");
         let mut all_devices = Vec::new();
-        
+
         for driver in &self.drivers {
             match driver.scan_devices().await {
                 Ok(devices) => {
@@ -86,24 +86,24 @@ impl DeviceManager {
                 }
             }
         }
-        
+
         // 更新设备信息缓存
         let mut device_info = self.device_info.write().await;
         for device in &all_devices {
             device_info.insert(device.id, device.clone());
         }
-        
+
         info!("Total {} devices found", all_devices.len());
         Ok(all_devices)
     }
-    
+
     /// 初始化所有设备
     pub async fn initialize_devices(&mut self) -> Result<(), DeviceError> {
         info!("Initializing devices");
         let device_info = self.device_info.read().await;
         let mut devices = self.devices.write().await;
         let mut stats = self.device_stats.write().await;
-        
+
         for (device_id, info) in device_info.iter() {
             // 查找合适的驱动
             let driver = self.drivers.iter()
@@ -112,13 +112,13 @@ impl DeviceManager {
                     device_id: *device_id,
                     reason: format!("No driver found for device type: {}", info.device_type),
                 })?;
-            
+
             // 创建设备实例
             match driver.create_device(info.clone()).await {
                 Ok(mut device) => {
                     // 获取设备配置
                     let device_config = self.get_device_config(info.chain_id);
-                    
+
                     // 初始化设备
                     match device.initialize(device_config).await {
                         Ok(_) => {
@@ -138,51 +138,51 @@ impl DeviceManager {
                 }
             }
         }
-        
+
         info!("All devices initialized successfully");
         Ok(())
     }
-    
+
     /// 启动设备管理器
     pub async fn start(&mut self) -> Result<(), DeviceError> {
         info!("Starting device manager");
-        
+
         // 设置运行状态
         *self.running.write().await = true;
-        
+
         // 启动所有设备
         self.start_all_devices().await?;
-        
+
         // 启动监控任务
         self.start_monitoring().await?;
-        
+
         info!("Device manager started successfully");
         Ok(())
     }
-    
+
     /// 停止设备管理器
     pub async fn stop(&mut self) -> Result<(), DeviceError> {
         info!("Stopping device manager");
-        
+
         // 设置停止状态
         *self.running.write().await = false;
-        
+
         // 停止监控任务
         if let Some(handle) = self.monitoring_handle.take() {
             handle.abort();
         }
-        
+
         // 停止所有设备
         self.stop_all_devices().await?;
-        
+
         info!("Device manager stopped successfully");
         Ok(())
     }
-    
+
     /// 启动所有设备
     async fn start_all_devices(&self) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
-        
+
         for (device_id, device) in devices.iter() {
             let mut device = device.lock().await;
             match device.start().await {
@@ -195,14 +195,14 @@ impl DeviceManager {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// 停止所有设备
     async fn stop_all_devices(&self) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
-        
+
         for (device_id, device) in devices.iter() {
             let mut device = device.lock().await;
             match device.stop().await {
@@ -214,10 +214,10 @@ impl DeviceManager {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// 启动监控任务
     async fn start_monitoring(&mut self) -> Result<(), DeviceError> {
         let devices = self.devices.clone();
@@ -225,18 +225,18 @@ impl DeviceManager {
         let device_stats = self.device_stats.clone();
         let running = self.running.clone();
         let scan_interval = Duration::from_secs(self.config.scan_interval);
-        
+
         let handle = tokio::spawn(async move {
             let mut interval = interval(scan_interval);
-            
+
             while *running.read().await {
                 interval.tick().await;
-                
+
                 // 更新设备状态和统计信息
                 let devices = devices.read().await;
                 for (device_id, device) in devices.iter() {
                     let device = device.lock().await;
-                    
+
                     // 获取设备状态
                     if let Ok(status) = device.get_status().await {
                         let mut info = device_info.write().await;
@@ -244,13 +244,13 @@ impl DeviceManager {
                             device_info.update_status(status);
                         }
                     }
-                    
+
                     // 获取设备统计信息
                     if let Ok(stats) = device.get_stats().await {
                         let mut device_stats = device_stats.write().await;
                         device_stats.insert(*device_id, stats);
                     }
-                    
+
                     // 获取温度
                     if let Ok(temperature) = device.get_temperature().await {
                         let mut info = device_info.write().await;
@@ -258,7 +258,7 @@ impl DeviceManager {
                             device_info.update_temperature(temperature);
                         }
                     }
-                    
+
                     // 获取算力
                     if let Ok(hashrate) = device.get_hashrate().await {
                         let mut info = device_info.write().await;
@@ -269,11 +269,11 @@ impl DeviceManager {
                 }
             }
         });
-        
+
         self.monitoring_handle = Some(handle);
         Ok(())
     }
-    
+
     /// 获取设备配置
     fn get_device_config(&self, chain_id: u8) -> crate::device::DeviceConfig {
         // 查找对应链的配置
@@ -291,29 +291,29 @@ impl DeviceManager {
                 };
             }
         }
-        
+
         // 返回默认配置
         crate::device::DeviceConfig::default()
     }
-    
+
     /// 获取设备信息
     pub async fn get_device_info(&self, device_id: u32) -> Option<DeviceInfo> {
         let device_info = self.device_info.read().await;
         device_info.get(&device_id).cloned()
     }
-    
+
     /// 获取所有设备信息
     pub async fn get_all_device_info(&self) -> Vec<DeviceInfo> {
         let device_info = self.device_info.read().await;
         device_info.values().cloned().collect()
     }
-    
+
     /// 获取设备统计信息
     pub async fn get_device_stats(&self, device_id: u32) -> Option<DeviceStats> {
         let device_stats = self.device_stats.read().await;
         device_stats.get(&device_id).cloned()
     }
-    
+
     /// 重启设备
     pub async fn restart_device(&self, device_id: u32) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
@@ -326,7 +326,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 提交工作到设备
     pub async fn submit_work(&self, device_id: u32, work: Work) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
@@ -339,7 +339,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 从设备获取结果
     pub async fn get_result(&self, device_id: u32) -> Result<Option<MiningResult>, DeviceError> {
         let devices = self.devices.read().await;
@@ -350,7 +350,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 设置设备频率
     pub async fn set_device_frequency(&self, device_id: u32, frequency: u32) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
@@ -363,7 +363,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 设置设备电压
     pub async fn set_device_voltage(&self, device_id: u32, voltage: u32) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
@@ -376,7 +376,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 检查设备健康状态
     pub async fn health_check(&self, device_id: u32) -> Result<bool, DeviceError> {
         let devices = self.devices.read().await;
@@ -387,7 +387,7 @@ impl DeviceManager {
             Err(DeviceError::NotFound { device_id })
         }
     }
-    
+
     /// 获取活跃设备数量
     pub async fn get_active_device_count(&self) -> u32 {
         let device_info = self.device_info.read().await;
@@ -395,7 +395,7 @@ impl DeviceManager {
             .filter(|info| info.is_healthy())
             .count() as u32
     }
-    
+
     /// 获取总算力
     pub async fn get_total_hashrate(&self) -> f64 {
         let device_info = self.device_info.read().await;

@@ -6,6 +6,7 @@ use crate::error::MiningError;
 use crate::device::{DeviceManager, Work, MiningResult};
 use crate::pool::PoolManager;
 use crate::monitoring::MonitoringSystem;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::{RwLock, Mutex};
 use std::time::{Duration, SystemTime};
@@ -15,7 +16,7 @@ pub use manager::MiningManager;
 pub use work_queue::{WorkQueue, WorkQueueManager};
 
 /// 挖矿状态
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MiningState {
     /// 未启动
     Stopped,
@@ -56,11 +57,11 @@ impl MiningStats {
     pub fn new() -> Self {
         Default::default()
     }
-    
+
     pub fn start(&mut self) {
         self.start_time = Some(SystemTime::now());
     }
-    
+
     pub fn update_uptime(&mut self) {
         if let Some(start_time) = self.start_time {
             self.uptime = SystemTime::now()
@@ -68,7 +69,7 @@ impl MiningStats {
                 .unwrap_or(Duration::from_secs(0));
         }
     }
-    
+
     pub fn record_accepted_share(&mut self, difficulty: f64) {
         self.accepted_shares += 1;
         self.last_share_time = Some(SystemTime::now());
@@ -76,22 +77,22 @@ impl MiningStats {
             self.best_share = difficulty;
         }
     }
-    
+
     pub fn record_rejected_share(&mut self) {
         self.rejected_shares += 1;
     }
-    
+
     pub fn record_hardware_error(&mut self) {
         self.hardware_errors += 1;
     }
-    
+
     pub fn record_stale_share(&mut self) {
         self.stale_shares += 1;
     }
-    
+
     pub fn update_hashrate(&mut self, hashrate: f64) {
         self.current_hashrate = hashrate;
-        
+
         // 计算平均算力 (简单的指数移动平均)
         if self.average_hashrate == 0.0 {
             self.average_hashrate = hashrate;
@@ -99,16 +100,16 @@ impl MiningStats {
             self.average_hashrate = self.average_hashrate * 0.9 + hashrate * 0.1;
         }
     }
-    
+
     pub fn update_power_consumption(&mut self, power: f64) {
         self.power_consumption = power;
-        
+
         // 计算效率 (MH/J)
         if power > 0.0 {
             self.efficiency = self.current_hashrate / power * 1000.0; // 转换为 MH/J
         }
     }
-    
+
     pub fn get_accept_rate(&self) -> f64 {
         let total_shares = self.accepted_shares + self.rejected_shares;
         if total_shares == 0 {
@@ -117,7 +118,7 @@ impl MiningStats {
             self.accepted_shares as f64 / total_shares as f64 * 100.0
         }
     }
-    
+
     pub fn get_reject_rate(&self) -> f64 {
         let total_shares = self.accepted_shares + self.rejected_shares;
         if total_shares == 0 {
@@ -126,7 +127,7 @@ impl MiningStats {
             self.rejected_shares as f64 / total_shares as f64 * 100.0
         }
     }
-    
+
     pub fn get_hardware_error_rate(&self) -> f64 {
         let total_work = self.accepted_shares + self.rejected_shares + self.hardware_errors;
         if total_work == 0 {
@@ -216,25 +217,25 @@ impl WorkItem {
             retry_count: 0,
         }
     }
-    
+
     pub fn with_device(mut self, device_id: u32) -> Self {
         self.assigned_device = Some(device_id);
         self
     }
-    
+
     pub fn with_priority(mut self, priority: u8) -> Self {
         self.priority = priority;
         self
     }
-    
+
     pub fn increment_retry(&mut self) {
         self.retry_count += 1;
     }
-    
+
     pub fn is_expired(&self) -> bool {
         self.work.is_expired()
     }
-    
+
     pub fn age(&self) -> Duration {
         SystemTime::now()
             .duration_since(self.created_at)
@@ -273,29 +274,29 @@ impl ResultItem {
             validation_status: ValidationStatus::Pending,
         }
     }
-    
+
     pub fn mark_valid(mut self) -> Self {
         self.validation_status = ValidationStatus::Valid;
         self
     }
-    
+
     pub fn mark_invalid(mut self, reason: String) -> Self {
         self.validation_status = ValidationStatus::Invalid(reason);
         self
     }
-    
+
     pub fn mark_stale(mut self) -> Self {
         self.validation_status = ValidationStatus::Stale;
         self
     }
-    
+
     pub fn is_valid(&self) -> bool {
         matches!(self.validation_status, ValidationStatus::Valid)
     }
 }
 
 /// 挖矿事件
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MiningEvent {
     /// 状态变更
     StateChanged {
@@ -364,7 +365,7 @@ impl MiningEvent {
             MiningEvent::PoolConnectionChanged { timestamp, .. } => *timestamp,
         }
     }
-    
+
     pub fn event_type(&self) -> &'static str {
         match self {
             MiningEvent::StateChanged { .. } => "state_changed",

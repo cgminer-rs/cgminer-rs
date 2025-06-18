@@ -1,5 +1,5 @@
 use crate::api::{
-    AppState, ApiResponse, SystemStatusResponse, DeviceStatusResponse, 
+    AppState, ApiResponse, SystemStatusResponse, DeviceStatusResponse,
     PoolStatusResponse, StatsResponse, ConfigUpdateRequest, ControlRequest, ControlResponse
 };
 use crate::error::ApiError;
@@ -16,32 +16,22 @@ use tracing::{info, warn, error};
 pub async fn get_system_status(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<SystemStatusResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
-    match state.mining_manager.get_system_status().await {
-        Ok(status) => {
-            let response = SystemStatusResponse {
-                version: env!("CARGO_PKG_VERSION").to_string(),
-                uptime: status.uptime.as_secs(),
-                mining_state: format!("{:?}", status.state),
-                total_hashrate: status.total_hashrate,
-                accepted_shares: status.accepted_shares,
-                rejected_shares: status.rejected_shares,
-                hardware_errors: status.hardware_errors,
-                active_devices: status.active_devices,
-                connected_pools: status.connected_pools,
-                current_difficulty: status.current_difficulty,
-                best_share: status.best_share,
-            };
-            
-            Ok(Json(ApiResponse::success(response)))
-        }
-        Err(e) => {
-            error!("Failed to get system status: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ApiResponse::error(format!("Failed to get system status: {}", e))),
-            ))
-        }
-    }
+    let status = state.mining_manager.get_system_status().await;
+    let response = SystemStatusResponse {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        uptime: status.uptime.as_secs(),
+        mining_state: format!("{:?}", status.state),
+        total_hashrate: status.total_hashrate,
+        accepted_shares: status.accepted_shares,
+        rejected_shares: status.rejected_shares,
+        hardware_errors: status.hardware_errors,
+        active_devices: status.active_devices,
+        connected_pools: status.connected_pools,
+        current_difficulty: status.current_difficulty,
+        best_share: status.best_share,
+    };
+
+    Ok(Json(ApiResponse::success(response)))
 }
 
 /// 获取统计信息
@@ -50,7 +40,7 @@ pub async fn get_stats(
 ) -> Result<Json<ApiResponse<StatsResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     // 获取挖矿统计
     let mining_stats = state.mining_manager.get_stats().await;
-    
+
     // 转换为响应格式
     let mining_stats_data = crate::api::MiningStatsData {
         start_time: mining_stats.start_time.map(|t| {
@@ -71,18 +61,18 @@ pub async fn get_stats(
         efficiency: mining_stats.efficiency,
         power_consumption: mining_stats.power_consumption,
     };
-    
+
     // 这里应该获取实际的设备和矿池统计
     // 为了简化，我们返回空的列表
     let device_stats = Vec::new();
     let pool_stats = Vec::new();
-    
+
     let response = StatsResponse {
         mining_stats: mining_stats_data,
         device_stats,
         pool_stats,
     };
-    
+
     Ok(Json(ApiResponse::success(response)))
 }
 
@@ -124,7 +114,7 @@ pub async fn get_devices(
                 .as_secs()),
         },
     ];
-    
+
     Ok(Json(ApiResponse::success(devices)))
 }
 
@@ -141,23 +131,23 @@ pub async fn get_device(
             Json(ApiResponse::error(format!("Device {} not found", device_id))),
         ));
     }
-    
+
     let device = DeviceStatusResponse {
         device_id,
         name: format!("Maijie L7 Chain {}", device_id),
         status: "Mining".to_string(),
         temperature: Some(65.5 + device_id as f32),
         hashrate: 38.0 - device_id as f64 * 0.5,
-        accepted_shares: 1250 - device_id * 70,
-        rejected_shares: 15 - device_id * 3,
-        hardware_errors: 2 - device_id,
+        accepted_shares: 1250 - device_id as u64 * 70,
+        rejected_shares: 15 - device_id as u64 * 3,
+        hardware_errors: 2 - device_id as u64,
         uptime: 3600,
         last_share_time: Some(std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs()),
     };
-    
+
     Ok(Json(ApiResponse::success(device)))
 }
 
@@ -167,7 +157,7 @@ pub async fn restart_device(
     State(_state): State<AppState>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Restarting device {}", device_id);
-    
+
     // 这里应该调用设备管理器的重启方法
     // 为了简化，我们只是返回成功消息
     if device_id > 1 {
@@ -176,7 +166,7 @@ pub async fn restart_device(
             Json(ApiResponse::error(format!("Device {} not found", device_id))),
         ));
     }
-    
+
     Ok(Json(ApiResponse::success(format!("Device {} restart initiated", device_id))))
 }
 
@@ -187,7 +177,7 @@ pub async fn update_device_config(
     Json(config): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Updating device {} configuration: {:?}", device_id, config);
-    
+
     // 这里应该验证配置并应用到设备
     // 为了简化，我们只是返回成功消息
     if device_id > 1 {
@@ -196,7 +186,7 @@ pub async fn update_device_config(
             Json(ApiResponse::error(format!("Device {} not found", device_id))),
         ));
     }
-    
+
     Ok(Json(ApiResponse::success(format!("Device {} configuration updated", device_id))))
 }
 
@@ -235,7 +225,7 @@ pub async fn get_pools(
             connected_at: None,
         },
     ];
-    
+
     Ok(Json(ApiResponse::success(pools)))
 }
 
@@ -252,7 +242,7 @@ pub async fn get_pool(
             Json(ApiResponse::error(format!("Pool {} not found", pool_id))),
         ));
     }
-    
+
     let pool = PoolStatusResponse {
         pool_id,
         url: format!("stratum+tcp://pool{}.example.com:4444", pool_id),
@@ -272,7 +262,7 @@ pub async fn get_pool(
             None
         },
     };
-    
+
     Ok(Json(ApiResponse::success(pool)))
 }
 
@@ -283,7 +273,7 @@ pub async fn update_pool_config(
     Json(config): Json<serde_json::Value>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Updating pool {} configuration: {:?}", pool_id, config);
-    
+
     // 这里应该验证配置并应用到矿池
     // 为了简化，我们只是返回成功消息
     if pool_id > 1 {
@@ -292,7 +282,7 @@ pub async fn update_pool_config(
             Json(ApiResponse::error(format!("Pool {} not found", pool_id))),
         ));
     }
-    
+
     Ok(Json(ApiResponse::success(format!("Pool {} configuration updated", pool_id))))
 }
 
@@ -302,7 +292,7 @@ pub async fn control_command(
     Json(request): Json<ControlRequest>,
 ) -> Result<Json<ApiResponse<ControlResponse>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Executing control command: {}", request.command);
-    
+
     let response = match request.command.as_str() {
         "start" => ControlResponse {
             command: request.command.clone(),
@@ -341,7 +331,7 @@ pub async fn control_command(
             result: None,
         },
     };
-    
+
     Ok(Json(ApiResponse::success(response)))
 }
 
@@ -351,15 +341,15 @@ pub async fn update_config(
     Json(request): Json<ConfigUpdateRequest>,
 ) -> Result<Json<ApiResponse<String>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Updating configuration: {:?}", request);
-    
+
     // 这里应该验证配置并应用更改
     // 为了简化，我们只是返回成功消息
-    
+
     Ok(Json(ApiResponse::success("Configuration updated successfully".to_string())))
 }
 
 /// 查询参数
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct QueryParams {
     pub limit: Option<usize>,
     pub offset: Option<usize>,
@@ -373,7 +363,7 @@ pub async fn get_devices_with_query(
     State(state): State<AppState>,
 ) -> Result<Json<ApiResponse<Vec<DeviceStatusResponse>>>, (StatusCode, Json<ApiResponse<()>>)> {
     info!("Getting devices with query params: {:?}", params);
-    
+
     // 这里应该根据查询参数过滤和排序设备
     // 为了简化，我们忽略查询参数并返回所有设备
     get_devices(State(state)).await

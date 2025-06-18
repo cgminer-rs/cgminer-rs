@@ -1,8 +1,9 @@
 use crate::error::DeviceError;
 use crate::device::{
     DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult,
-    MiningDevice, DeviceDriver, ChainController
+    MiningDevice, DeviceDriver
 };
+use crate::device::traits::ChainController;
 use crate::device::chain::AsicChainController;
 use crate::device::traits::HardwareInterface;
 use async_trait::async_trait;

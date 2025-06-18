@@ -42,7 +42,7 @@ impl<T> ApiResponse<T> {
                 .as_secs(),
         }
     }
-    
+
     pub fn error(error: String) -> Self {
         Self {
             success: false,
@@ -57,7 +57,7 @@ impl<T> ApiResponse<T> {
 }
 
 /// 系统状态响应
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemStatusResponse {
     pub version: String,
     pub uptime: u64,
@@ -73,7 +73,7 @@ pub struct SystemStatusResponse {
 }
 
 /// 设备状态响应
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceStatusResponse {
     pub device_id: u32,
     pub name: String,
@@ -88,7 +88,7 @@ pub struct DeviceStatusResponse {
 }
 
 /// 矿池状态响应
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolStatusResponse {
     pub pool_id: u32,
     pub url: String,
@@ -208,7 +208,7 @@ pub struct ControlResponse {
 }
 
 /// WebSocket 消息类型
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum WebSocketMessage {
     /// 订阅事件
@@ -243,28 +243,28 @@ pub fn create_routes(state: AppState) -> Router {
         // 系统状态路由
         .route("/api/v1/status", get(get_system_status))
         .route("/api/v1/stats", get(get_stats))
-        
+
         // 设备管理路由
         .route("/api/v1/devices", get(get_devices))
         .route("/api/v1/devices/:id", get(get_device))
         .route("/api/v1/devices/:id/restart", post(restart_device))
         .route("/api/v1/devices/:id/config", post(update_device_config))
-        
+
         // 矿池管理路由
         .route("/api/v1/pools", get(get_pools))
         .route("/api/v1/pools/:id", get(get_pool))
         .route("/api/v1/pools/:id/config", post(update_pool_config))
-        
+
         // 控制路由
         .route("/api/v1/control", post(control_command))
         .route("/api/v1/config", post(update_config))
-        
+
         // WebSocket 路由
         .route("/api/v1/ws", get(websocket_handler))
-        
+
         // 健康检查
         .route("/health", get(health_check))
-        
+
         .layer(
             ServiceBuilder::new()
                 .layer(TraceLayer::new_for_http())
