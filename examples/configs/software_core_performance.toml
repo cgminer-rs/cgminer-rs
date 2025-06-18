@@ -1,0 +1,215 @@
+# CGMiner-RS 软算法核心高性能配置
+# 本配置专门针对高性能挖矿进行优化
+# 适用于专用挖矿机器和高端硬件
+
+[general]
+log_level = "warn"          # 减少日志开销
+log_file = "logs/cgminer-performance.log"
+pid_file = "/tmp/cgminer-rs-perf.pid"
+work_restart_timeout = 45
+scan_time = 20
+
+# =============================================================================
+# 软算法核心配置 - 高性能优化
+# =============================================================================
+[cores]
+enabled_cores = ["software"]
+default_core = "software"
+
+[cores.software_core]
+enabled = true
+device_count = 16           # 最大化设备数量
+min_hashrate = 2000000000.0 # 2 GH/s - 高性能最小算力
+max_hashrate = 8000000000.0 # 8 GH/s - 高性能最大算力
+error_rate = 0.001          # 0.1% - 极低错误率
+batch_size = 8000           # 大批次处理
+work_timeout_ms = 1500      # 短超时提高响应速度
+
+# CPU绑定配置 - 高性能优化
+[cores.software_core.cpu_affinity]
+enabled = true
+strategy = "performance_first"  # 性能优先策略
+# 手动绑定到性能核心 (示例：16核心系统)
+# manual_mapping = { 
+#   0 = 0, 1 = 1, 2 = 2, 3 = 3, 4 = 4, 5 = 5, 6 = 6, 7 = 7,
+#   8 = 8, 9 = 9, 10 = 10, 11 = 11, 12 = 12, 13 = 13, 14 = 14, 15 = 15
+# }
+
+# 禁用ASIC核心
+[cores.asic_core]
+enabled = false
+chain_count = 3
+spi_speed = 6000000
+uart_baud = 115200
+auto_detect = false
+power_limit = 3000.0
+cooling_mode = "auto"
+
+# =============================================================================
+# 高性能设备配置
+# =============================================================================
+[devices]
+auto_detect = true
+scan_interval = 60          # 较长扫描间隔减少开销
+
+# 多个高频虚拟链
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 1000            # 高频率
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 1000
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+[[devices.chains]]
+id = 2
+enabled = true
+frequency = 1000
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+[[devices.chains]]
+id = 3
+enabled = true
+frequency = 1000
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+[[devices.chains]]
+id = 4
+enabled = true
+frequency = 1000
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+[[devices.chains]]
+id = 5
+enabled = true
+frequency = 1000
+voltage = 1000
+auto_tune = false
+chip_count = 2
+
+# =============================================================================
+# 高性能矿池配置
+# =============================================================================
+[pools]
+strategy = "LoadBalance"    # 负载均衡策略
+failover_timeout = 15       # 快速故障转移
+retry_interval = 3          # 快速重试
+
+# 主要F2Pool连接
+[[pools.pools]]
+url = "stratum+tcp://btc.f2pool.com:1314"
+user = "kayuii.bbt"
+password = "21235365876986800"
+priority = 1
+enabled = true
+
+# 亚洲F2Pool连接
+[[pools.pools]]
+url = "stratum+tcp://btc-asia.f2pool.com:1314"
+user = "kayuii.bbt"
+password = "21235365876986800"
+priority = 1  # 相同优先级用于负载均衡
+enabled = true
+
+# 欧洲F2Pool连接 (如果可用)
+[[pools.pools]]
+url = "stratum+tcp://btc-eu.f2pool.com:1314"
+user = "kayuii.bbt"
+password = "21235365876986800"
+priority = 1  # 相同优先级用于负载均衡
+enabled = false  # 根据需要启用
+
+# =============================================================================
+# 高性能API配置
+# =============================================================================
+[api]
+enabled = true
+bind_address = "0.0.0.0"    # 允许远程访问
+port = 4028
+allow_origins = ["*"]
+# auth_token = "high-perf-token"  # 生产环境建议启用
+
+# =============================================================================
+# 高性能监控配置
+# =============================================================================
+[monitoring]
+enabled = true
+metrics_interval = 60       # 较长间隔减少监控开销
+prometheus_port = 9090
+
+[monitoring.alert_thresholds]
+# 高性能环境的严格阈值
+temperature_warning = 65.0
+temperature_critical = 75.0
+hashrate_drop_percent = 10.0  # 严格的算力监控
+error_rate_percent = 1.0      # 严格的错误率监控
+max_temperature = 70.0
+max_cpu_usage = 95.0          # 允许高CPU使用率
+max_memory_usage = 85.0
+max_device_temperature = 70.0
+max_error_rate = 1.0
+min_hashrate = 1000.0         # 高最小算力要求
+
+# =============================================================================
+# 极致性能优化配置
+# =============================================================================
+[performance]
+cpu_optimization = true
+thread_priority = "high"     # 高优先级
+memory_pool_size = 4096      # 大内存池
+work_queue_size = 20000      # 大工作队列
+
+use_sse = true
+use_avx = true               # 启用所有SIMD优化
+batch_processing = true
+
+# =============================================================================
+# 生产调试配置
+# =============================================================================
+[debug]
+enabled = false              # 生产环境禁用调试
+verbose_logging = false
+performance_profiling = false
+memory_tracking = false
+network_debugging = false
+
+# 生产测试模式
+[test_mode]
+enabled = false              # 生产环境禁用测试模式
+simulate_hardware = false
+fake_hashrate = false
+offline_mode = false
+
+# =============================================================================
+# 高性能高级配置
+# =============================================================================
+[advanced]
+# 优化的网络配置
+connection_timeout = 20
+read_timeout = 8
+write_timeout = 8
+keepalive_interval = 45
+
+# 生产重试配置
+max_retries = 3
+retry_delay = 3
+exponential_backoff = true
+
+# 高性能资源配置
+max_memory_usage = 8192      # 8GB内存限制
+max_cpu_cores = 0            # 使用所有可用核心
+max_threads_per_core = 4     # 每核心多线程

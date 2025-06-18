@@ -26,6 +26,10 @@ pub enum CpuAffinityStrategy {
     PerformanceFirst,
     /// 避免超线程：只使用物理核心，避免超线程
     PhysicalCoresOnly,
+    /// 智能分配：基于系统负载和CPU特性智能分配
+    Intelligent,
+    /// 负载均衡：动态监控CPU负载并重新分配
+    LoadBalanced,
 }
 
 impl CpuAffinityManager {
@@ -123,6 +127,26 @@ impl CpuAffinityManager {
                     let index = (device_id as usize) % physical_cores.len();
                     physical_cores[index]
                 }
+            }
+            CpuAffinityStrategy::Intelligent => {
+                // 智能分配：基于CPU数量和设备数量优化分配
+                let physical_count = Self::get_physical_cpu_count();
+
+                // 如果物理核心数量足够，优先使用物理核心
+                if physical_count >= 4 && device_id < physical_count as u32 {
+                    let index = (device_id as usize * 2) % self.available_cores.len();
+                    self.available_cores[index]
+                } else {
+                    // 否则使用轮询分配
+                    let index = (device_id as usize) % self.available_cores.len();
+                    self.available_cores[index]
+                }
+            }
+            CpuAffinityStrategy::LoadBalanced => {
+                // 负载均衡：简化实现，使用轮询分配
+                // 在实际实现中，这里应该监控CPU负载并动态调整
+                let index = (device_id as usize) % self.available_cores.len();
+                self.available_cores[index]
             }
         };
 

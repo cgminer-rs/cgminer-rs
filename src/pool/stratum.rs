@@ -91,15 +91,15 @@ impl StratumClient {
             pending_requests: Arc::new(RwLock::new(HashMap::new())),
         })
     }
-    
+
     /// 连接到矿池
     pub async fn connect(&mut self) -> Result<(), PoolError> {
         info!("Connecting to Stratum pool: {}", self.url);
-        
+
         // 解析URL
         let url = self.url.strip_prefix("stratum+tcp://")
             .ok_or_else(|| PoolError::InvalidUrl { url: self.url.clone() })?;
-        
+
         // 连接TCP
         let stream = match timeout(Duration::from_secs(10), TcpStream::connect(url)).await {
             Ok(Ok(stream)) => stream,
@@ -113,47 +113,47 @@ impl StratumClient {
                 return Err(PoolError::Timeout { url: self.url.clone() });
             }
         };
-        
+
         *self.stream.lock().await = Some(stream);
         *self.connected.write().await = true;
-        
+
         // 启动消息处理循环
         self.start_message_loop().await?;
-        
+
         // 发送订阅请求
         self.subscribe().await?;
-        
+
         // 发送认证请求
         self.authorize().await?;
-        
+
         info!("Successfully connected to Stratum pool");
         Ok(())
     }
-    
+
     /// 断开连接
     pub async fn disconnect(&mut self) -> Result<(), PoolError> {
         info!("Disconnecting from Stratum pool");
-        
+
         *self.connected.write().await = false;
-        
+
         if let Some(stream) = self.stream.lock().await.take() {
             drop(stream);
         }
-        
+
         // 清理状态
         *self.subscription_id.write().await = None;
         *self.extra_nonce1.write().await = None;
         *self.current_job.write().await = None;
         self.pending_requests.write().await.clear();
-        
+
         info!("Disconnected from Stratum pool");
         Ok(())
     }
-    
+
     /// 订阅挖矿通知
     async fn subscribe(&self) -> Result<(), PoolError> {
         debug!("Sending mining.subscribe");
-        
+
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
             method: Some("mining.subscribe".to_string()),
@@ -161,36 +161,40 @@ impl StratumClient {
             result: None,
             error: None,
         };
-        
+
         let response = self.send_request(message).await?;
-        
+
         if let Some(result) = response.result {
             if let Some(array) = result.as_array() {
-                if array.len() >= 3 {
+                if array.len() >= 2 {
                     // 解析订阅响应
-                    if let Some(subscription_id) = array[1].as_str() {
+                    if let Some(subscription_id) = array.get(1).and_then(|v| v.as_str()) {
                         *self.subscription_id.write().await = Some(subscription_id.to_string());
                     }
-                    
-                    if let Some(extra_nonce1) = array[2].as_str() {
-                        *self.extra_nonce1.write().await = Some(extra_nonce1.to_string());
+
+                    if array.len() >= 3 {
+                        if let Some(extra_nonce1) = array.get(2).and_then(|v| v.as_str()) {
+                            *self.extra_nonce1.write().await = Some(extra_nonce1.to_string());
+                        }
                     }
-                    
-                    if let Some(extra_nonce2_size) = array[3].as_u64() {
-                        *self.extra_nonce2_size.write().await = extra_nonce2_size as usize;
+
+                    if array.len() >= 4 {
+                        if let Some(extra_nonce2_size) = array.get(3).and_then(|v| v.as_u64()) {
+                            *self.extra_nonce2_size.write().await = extra_nonce2_size as usize;
+                        }
                     }
                 }
             }
         }
-        
+
         debug!("Mining subscription successful");
         Ok(())
     }
-    
+
     /// 认证
     async fn authorize(&self) -> Result<(), PoolError> {
         debug!("Sending mining.authorize");
-        
+
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
             method: Some("mining.authorize".to_string()),
@@ -198,9 +202,9 @@ impl StratumClient {
             result: None,
             error: None,
         };
-        
+
         let response = self.send_request(message).await?;
-        
+
         if let Some(result) = response.result {
             if result.as_bool() == Some(true) {
                 debug!("Mining authorization successful");
@@ -217,11 +221,11 @@ impl StratumClient {
             Err(PoolError::AuthenticationFailed { url: self.url.clone() })
         }
     }
-    
+
     /// 提交份额
     pub async fn submit_share(&self, share: &Share) -> Result<bool, PoolError> {
         debug!("Submitting share: nonce={:08x}", share.nonce);
-        
+
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
             method: Some("mining.submit".to_string()),
@@ -235,9 +239,9 @@ impl StratumClient {
             result: None,
             error: None,
         };
-        
+
         let response = self.send_request(message).await?;
-        
+
         if let Some(result) = response.result {
             Ok(result.as_bool().unwrap_or(false))
         } else if let Some(error) = response.error {
@@ -246,11 +250,11 @@ impl StratumClient {
             Ok(false)
         }
     }
-    
+
     /// 获取工作
     pub async fn get_work(&self) -> Result<Work, PoolError> {
         let job = self.current_job.read().await;
-        
+
         if let Some(job) = job.as_ref() {
             // 构造工作数据
             let work = self.build_work_from_job(job)?;
@@ -262,49 +266,49 @@ impl StratumClient {
             })
         }
     }
-    
+
     /// 从作业构造工作
     fn build_work_from_job(&self, job: &StratumJob) -> Result<Work, PoolError> {
         // 这里需要实现从 Stratum 作业到 Work 的转换
         // 为了简化，我们创建一个基本的工作结构
-        
+
         let mut header = [0u8; 80];
         let target = [0u8; 32];
-        
+
         // 解析版本
         if let Ok(version_bytes) = hex::decode(&job.version) {
             if version_bytes.len() >= 4 {
                 header[0..4].copy_from_slice(&version_bytes[0..4]);
             }
         }
-        
+
         // 解析前一个区块哈希
         if let Ok(prev_hash_bytes) = hex::decode(&job.previous_hash) {
             if prev_hash_bytes.len() >= 32 {
                 header[4..36].copy_from_slice(&prev_hash_bytes[0..32]);
             }
         }
-        
+
         // 解析时间
         if let Ok(time_bytes) = hex::decode(&job.ntime) {
             if time_bytes.len() >= 4 {
                 header[68..72].copy_from_slice(&time_bytes[0..4]);
             }
         }
-        
+
         // 解析难度目标
         if let Ok(bits_bytes) = hex::decode(&job.nbits) {
             if bits_bytes.len() >= 4 {
                 header[72..76].copy_from_slice(&bits_bytes[0..4]);
             }
         }
-        
+
         let difficulty = *tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 self.difficulty.read().await
             })
         });
-        
+
         Ok(Work::new(
             job.job_id.clone(),
             target,
@@ -312,7 +316,7 @@ impl StratumClient {
             difficulty,
         ))
     }
-    
+
     /// 发送ping
     pub async fn ping(&self) -> Result<(), PoolError> {
         let message = StratumMessage {
@@ -322,22 +326,22 @@ impl StratumClient {
             result: None,
             error: None,
         };
-        
+
         let _response = self.send_request(message).await?;
         Ok(())
     }
-    
+
     /// 发送请求并等待响应
     async fn send_request(&self, message: StratumMessage) -> Result<StratumMessage, PoolError> {
         let message_id = message.id.unwrap();
         let (tx, rx) = tokio::sync::oneshot::channel();
-        
+
         // 注册待处理请求
         self.pending_requests.write().await.insert(message_id, tx);
-        
+
         // 发送消息
         self.send_message(message).await?;
-        
+
         // 等待响应
         match timeout(Duration::from_secs(30), rx).await {
             Ok(Ok(response)) => Ok(response),
@@ -352,7 +356,7 @@ impl StratumClient {
             }
         }
     }
-    
+
     /// 发送消息
     async fn send_message(&self, message: StratumMessage) -> Result<(), PoolError> {
         let json_str = serde_json::to_string(&message)
@@ -360,7 +364,7 @@ impl StratumClient {
                 url: self.url.clone(),
                 error: format!("JSON serialization error: {}", e),
             })?;
-        
+
         let mut stream_guard = self.stream.lock().await;
         if let Some(stream) = stream_guard.as_mut() {
             stream.write_all(json_str.as_bytes()).await
@@ -368,13 +372,13 @@ impl StratumClient {
                     url: self.url.clone(),
                     error: e.to_string(),
                 })?;
-            
+
             stream.write_all(b"\n").await
                 .map_err(|e| PoolError::ConnectionFailed {
                     url: self.url.clone(),
                     error: e.to_string(),
                 })?;
-            
+
             stream.flush().await
                 .map_err(|e| PoolError::ConnectionFailed {
                     url: self.url.clone(),
@@ -386,11 +390,11 @@ impl StratumClient {
                 error: "Not connected".to_string(),
             });
         }
-        
+
         debug!("Sent: {}", json_str);
         Ok(())
     }
-    
+
     /// 启动消息处理循环
     async fn start_message_loop(&self) -> Result<(), PoolError> {
         let stream = self.stream.clone();
@@ -398,22 +402,22 @@ impl StratumClient {
         let pending_requests = self.pending_requests.clone();
         let current_job = self.current_job.clone();
         let difficulty = self.difficulty.clone();
-        
+
         tokio::spawn(async move {
             let mut stream_guard = stream.lock().await;
             if let Some(stream) = stream_guard.take() {
                 let mut reader = BufReader::new(stream);
                 let mut line = String::new();
-                
+
                 while *connected.read().await {
                     line.clear();
-                    
+
                     match reader.read_line(&mut line).await {
                         Ok(0) => break, // EOF
                         Ok(_) => {
                             if let Ok(message) = serde_json::from_str::<StratumMessage>(&line.trim()) {
                                 debug!("Received: {}", line.trim());
-                                
+
                                 // 处理响应
                                 if let Some(id) = message.id {
                                     let mut pending = pending_requests.write().await;
@@ -422,7 +426,7 @@ impl StratumClient {
                                         continue;
                                     }
                                 }
-                                
+
                                 // 处理通知
                                 if let Some(method) = &message.method {
                                     match method.as_str() {
@@ -457,14 +461,14 @@ impl StratumClient {
                         }
                     }
                 }
-                
+
                 *connected.write().await = false;
             }
         });
-        
+
         Ok(())
     }
-    
+
     /// 解析作业通知
     fn parse_job_notification(params: &Value) -> Option<StratumJob> {
         if let Some(array) = params.as_array() {
@@ -487,7 +491,7 @@ impl StratumClient {
         }
         None
     }
-    
+
     /// 获取下一个消息ID
     async fn next_message_id(&self) -> u64 {
         let mut id = self.message_id.write().await;

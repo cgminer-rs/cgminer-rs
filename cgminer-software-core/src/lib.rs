@@ -7,6 +7,7 @@ pub mod core;
 pub mod device;
 pub mod factory;
 pub mod cpu_affinity;
+pub mod performance;
 
 // 重新导出主要类型
 pub use core::SoftwareMiningCore;
@@ -37,7 +38,7 @@ pub fn create_factory() -> Box<dyn cgminer_core::CoreFactory> {
 
 // C FFI 导出函数，用于动态加载
 #[no_mangle]
-pub extern "C" fn cgminer_core_info() -> *const std::os::raw::c_char {
+pub extern "C" fn cgminer_software_core_info() -> *const std::os::raw::c_char {
     use std::ffi::CString;
 
     let info = get_core_info();
@@ -49,13 +50,13 @@ pub extern "C" fn cgminer_core_info() -> *const std::os::raw::c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn cgminer_create_factory() -> *mut std::os::raw::c_void {
+pub extern "C" fn cgminer_software_create_factory() -> *mut std::os::raw::c_void {
     let factory = create_factory();
     Box::into_raw(Box::new(factory)) as *mut std::os::raw::c_void
 }
 
 #[no_mangle]
-pub extern "C" fn cgminer_free_string(ptr: *mut std::os::raw::c_char) {
+pub extern "C" fn cgminer_software_free_string(ptr: *mut std::os::raw::c_char) {
     if !ptr.is_null() {
         unsafe {
             let _ = std::ffi::CString::from_raw(ptr);

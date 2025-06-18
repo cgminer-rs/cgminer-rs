@@ -245,12 +245,8 @@ impl SoftwareDevice {
 impl MiningDevice for SoftwareDevice {
     /// 获取设备ID
     fn device_id(&self) -> u32 {
-        // 使用 tokio::task::block_in_place 来在异步上下文中调用同步代码
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async {
-                self.device_info.read().unwrap().id
-            })
-        })
+        // 直接读取设备ID，避免在测试环境中使用block_in_place
+        self.device_info.read().unwrap().id
     }
 
     /// 获取设备信息

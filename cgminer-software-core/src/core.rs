@@ -5,6 +5,8 @@ use cgminer_core::{
     DeviceInfo, MiningDevice, Work, MiningResult
 };
 use crate::device::SoftwareDevice;
+use crate::performance::{PerformanceConfig, PerformanceOptimizer};
+use crate::cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -28,6 +30,10 @@ pub struct SoftwareMiningCore {
     running: Arc<RwLock<bool>>,
     /// 启动时间
     start_time: Option<SystemTime>,
+    /// 性能优化器
+    performance_optimizer: Option<PerformanceOptimizer>,
+    /// CPU绑定管理器
+    cpu_affinity_manager: Option<Arc<RwLock<CpuAffinityManager>>>,
 }
 
 impl SoftwareMiningCore {
@@ -63,6 +69,8 @@ impl SoftwareMiningCore {
             stats: Arc::new(RwLock::new(stats)),
             running: Arc::new(RwLock::new(false)),
             start_time: None,
+            performance_optimizer: None,
+            cpu_affinity_manager: None,
         }
     }
 
@@ -107,7 +115,7 @@ impl SoftwareMiningCore {
             let device_hashrate = min_hashrate +
                 (max_hashrate - min_hashrate) * (i as f64 / device_count.max(1) as f64);
 
-            let device_config = if (i as usize) < config.devices.len() {
+            let mut device_config = if (i as usize) < config.devices.len() {
                 config.devices[i as usize].clone()
             } else {
                 cgminer_core::DeviceConfig {
@@ -122,6 +130,11 @@ impl SoftwareMiningCore {
                 }
             };
 
+            // 应用性能优化
+            if let Some(optimizer) = &self.performance_optimizer {
+                optimizer.apply_to_device_config(&mut device_config, 1000 + i);
+            }
+
             let device_info = DeviceInfo::new(
                 1000 + i,
                 format!("Software Device {}", i),
@@ -129,13 +142,32 @@ impl SoftwareMiningCore {
                 i as u8,
             );
 
-            let device = SoftwareDevice::new(
-                device_info,
-                device_config,
-                device_hashrate,
-                error_rate,
-                batch_size,
-            ).await?;
+            let device = if let Some(cpu_affinity) = &self.cpu_affinity_manager {
+                // 为CPU绑定管理器分配设备
+                {
+                    let mut affinity_manager = cpu_affinity.write().map_err(|e| {
+                        CoreError::runtime(format!("Failed to acquire write lock: {}", e))
+                    })?;
+                    affinity_manager.assign_cpu_core(1000 + i);
+                }
+
+                SoftwareDevice::new_with_cpu_affinity(
+                    device_info,
+                    device_config,
+                    device_hashrate,
+                    error_rate,
+                    batch_size,
+                    cpu_affinity.clone(),
+                ).await?
+            } else {
+                SoftwareDevice::new(
+                    device_info,
+                    device_config,
+                    device_hashrate,
+                    error_rate,
+                    batch_size,
+                ).await?
+            };
 
             devices.push(Box::new(device) as Box<dyn MiningDevice>);
         }
@@ -208,6 +240,29 @@ impl MiningCore for SoftwareMiningCore {
 
         // 验证配置
         self.validate_config(&config)?;
+
+        // 初始化性能优化器
+        let mut perf_config = crate::performance::PerformanceConfig::default();
+        let mut optimizer = PerformanceOptimizer::new(perf_config.clone());
+        optimizer.optimize_for_system();
+        perf_config = optimizer.get_config().clone();
+        self.performance_optimizer = Some(optimizer);
+
+        // 初始化CPU绑定管理器
+        if perf_config.cpu_affinity.enabled {
+            let strategy = match perf_config.cpu_affinity.strategy.as_str() {
+                "round_robin" => CpuAffinityStrategy::RoundRobin,
+                "intelligent" => CpuAffinityStrategy::Intelligent,
+                "load_balanced" => CpuAffinityStrategy::LoadBalanced,
+                "physical_cores_only" => CpuAffinityStrategy::PhysicalCoresOnly,
+                "performance_first" => CpuAffinityStrategy::PerformanceFirst,
+                _ => CpuAffinityStrategy::Intelligent,
+            };
+
+            let cpu_manager = CpuAffinityManager::new(true, strategy);
+            self.cpu_affinity_manager = Some(Arc::new(RwLock::new(cpu_manager)));
+            info!("✅ CPU绑定管理器已启用，策略: {}", perf_config.cpu_affinity.strategy);
+        }
 
         // 创建设备
         let devices = self.create_software_devices(&config).await?;

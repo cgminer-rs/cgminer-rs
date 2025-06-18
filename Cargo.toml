@@ -114,3 +114,8 @@ asic-core = ["cgminer-asic-core"]
 maijie-l7 = ["asic-core"]
 web-ui = []
 metrics = ["prometheus"]
+
+[[bench]]
+name = "software_core_benchmark"
+harness = false
+required-features = ["software-core"]

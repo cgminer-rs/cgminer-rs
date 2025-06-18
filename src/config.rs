@@ -64,7 +64,7 @@ pub struct SoftwareCoreConfig {
     pub batch_size: u32,
     pub work_timeout_ms: u64,
     /// CPU绑定配置
-    pub cpu_affinity: CpuAffinityConfig,
+    pub cpu_affinity: Option<CpuAffinityConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +114,7 @@ pub struct PoolConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub enum PoolStrategy {
     Failover,
     RoundRobin,
@@ -183,11 +184,11 @@ impl Default for Config {
                     error_rate: 0.01, // 1%
                     batch_size: 1000,
                     work_timeout_ms: 5000,
-                    cpu_affinity: CpuAffinityConfig {
+                    cpu_affinity: Some(CpuAffinityConfig {
                         enabled: true,
                         strategy: "round_robin".to_string(),
                         manual_mapping: None,
-                    },
+                    }),
                 }),
                 asic_core: Some(AsicCoreConfig {
                     enabled: false,
@@ -363,5 +364,10 @@ impl Config {
         }
 
         Ok(())
+    }
+
+    /// 检查配置是否有效
+    pub fn is_valid(&self) -> bool {
+        self.validate().is_ok()
     }
 }
