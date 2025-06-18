@@ -1,8 +1,8 @@
 [workspace]
 members = [
     "cgminer-core",
-    "cgminer-software-core",
-    "cgminer-asic-core"
+    "cgminer-s-btc-core",
+    "cgminer-a-maijie-l7-core"
 ]
 
 [package]
@@ -19,8 +19,8 @@ categories = ["hardware-support", "network-programming"]
 [dependencies]
 # Core libraries
 cgminer-core = { path = "cgminer-core" }
-cgminer-software-core = { path = "cgminer-software-core", optional = true }
-cgminer-asic-core = { path = "cgminer-asic-core", optional = true }
+cgminer-s-btc-core = { path = "cgminer-s-btc-core", optional = true }
+cgminer-a-maijie-l7-core = { path = "cgminer-a-maijie-l7-core", optional = true }
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
@@ -112,14 +112,27 @@ debug = true
 opt-level = 0
 
 [features]
-default = ["software-core", "asic-core"]
-software-core = ["cgminer-software-core"]
-asic-core = ["cgminer-asic-core"]
-maijie-l7 = ["asic-core"]
+default = ["btc-software"]
+
+# 重命名后的特性
+btc-software = ["cgminer-s-btc-core"]
+maijie-l7 = ["cgminer-a-maijie-l7-core"]
+
+# 组合特性
+all-cores = ["btc-software", "maijie-l7"]
+hardware-only = ["maijie-l7"]
+software-only = ["btc-software"]
+
+# 其他特性
 web-ui = []
 metrics = ["prometheus"]
 
 [[bench]]
-name = "software_core_benchmark"
+name = "btc_software_core_benchmark"
 harness = false
-required-features = ["software-core"]
+required-features = ["btc-software"]
+
+[[bench]]
+name = "maijie_l7_core_benchmark"
+harness = false
+required-features = ["maijie-l7"]

@@ -5,11 +5,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{info, warn, error, debug};
 
-#[cfg(feature = "software-core")]
-use cgminer_software_core;
+#[cfg(feature = "btc-software")]
+use cgminer_s_btc_core;
 
-#[cfg(feature = "asic-core")]
-use cgminer_asic_core;
+#[cfg(feature = "maijie-l7")]
+use cgminer_a_maijie_l7_core;
 
 /// 核心加载器
 pub struct CoreLoader {
@@ -37,19 +37,19 @@ impl CoreLoader {
     pub async fn load_all_cores(&self) -> Result<(), CoreError> {
         info!("开始加载所有可用的挖矿核心");
 
-        // 加载软算法核心
-        #[cfg(feature = "software-core")]
+        // 加载Bitcoin软算法核心
+        #[cfg(feature = "btc-software")]
         {
-            if let Err(e) = self.load_software_core().await {
-                error!("加载软算法核心失败: {}", e);
+            if let Err(e) = self.load_btc_software_core().await {
+                error!("加载Bitcoin软算法核心失败: {}", e);
             }
         }
 
-        // 加载ASIC核心
-        #[cfg(feature = "asic-core")]
+        // 加载Maijie L7 ASIC核心
+        #[cfg(feature = "maijie-l7")]
         {
-            if let Err(e) = self.load_asic_core().await {
-                error!("加载ASIC核心失败: {}", e);
+            if let Err(e) = self.load_maijie_l7_core().await {
+                error!("加载Maijie L7 ASIC核心失败: {}", e);
             }
         }
 
@@ -59,51 +59,51 @@ impl CoreLoader {
         }
 
         let stats = self.registry.get_stats()?;
-        info!("核心加载完成，共加载 {} 个工厂，{} 个活跃核心", 
+        info!("核心加载完成，共加载 {} 个工厂，{} 个活跃核心",
               stats.registered_factories, stats.active_cores);
 
         Ok(())
     }
 
-    /// 加载软算法核心
-    #[cfg(feature = "software-core")]
-    async fn load_software_core(&self) -> Result<(), CoreError> {
-        info!("加载软算法核心");
+    /// 加载Bitcoin软算法核心
+    #[cfg(feature = "btc-software")]
+    async fn load_btc_software_core(&self) -> Result<(), CoreError> {
+        info!("加载Bitcoin软算法核心");
 
-        let factory = cgminer_software_core::create_factory();
+        let factory = cgminer_s_btc_core::create_factory();
         let core_info = factory.core_info();
-        
-        self.registry.register_factory("software".to_string(), factory)?;
-        
+
+        self.registry.register_factory("btc-software".to_string(), factory)?;
+
         {
             let mut loaded = self.loaded_cores.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
-            loaded.insert("software".to_string(), core_info.core_type);
+            loaded.insert("btc-software".to_string(), core_info.core_type);
         }
 
-        info!("软算法核心加载成功: {}", core_info.name);
+        info!("Bitcoin软算法核心加载成功: {}", core_info.name);
         Ok(())
     }
 
-    /// 加载ASIC核心
-    #[cfg(feature = "asic-core")]
-    async fn load_asic_core(&self) -> Result<(), CoreError> {
-        info!("加载ASIC核心");
+    /// 加载Maijie L7 ASIC核心
+    #[cfg(feature = "maijie-l7")]
+    async fn load_maijie_l7_core(&self) -> Result<(), CoreError> {
+        info!("加载Maijie L7 ASIC核心");
 
-        let factory = cgminer_asic_core::create_factory();
+        let factory = cgminer_a_maijie_l7_core::create_factory();
         let core_info = factory.core_info();
-        
-        self.registry.register_factory("asic".to_string(), factory)?;
-        
+
+        self.registry.register_factory("maijie-l7".to_string(), factory)?;
+
         {
             let mut loaded = self.loaded_cores.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
-            loaded.insert("asic".to_string(), core_info.core_type);
+            loaded.insert("maijie-l7".to_string(), core_info.core_type);
         }
 
-        info!("ASIC核心加载成功: {}", core_info.name);
+        info!("Maijie L7 ASIC核心加载成功: {}", core_info.name);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ impl CoreLoader {
             })?;
 
             // 获取核心信息
-            let get_info: Symbol<unsafe extern fn() -> *const std::os::raw::c_char> = 
+            let get_info: Symbol<unsafe extern fn() -> *const std::os::raw::c_char> =
                 lib.get(b"cgminer_core_info").map_err(|e| {
                     CoreError::runtime(format!("找不到 cgminer_core_info 函数: {}", e))
                 })?;
@@ -176,7 +176,7 @@ impl CoreLoader {
             })?;
 
             // 创建工厂
-            let create_factory: Symbol<unsafe extern fn() -> *mut std::os::raw::c_void> = 
+            let create_factory: Symbol<unsafe extern fn() -> *mut std::os::raw::c_void> =
                 lib.get(b"cgminer_create_factory").map_err(|e| {
                     CoreError::runtime(format!("找不到 cgminer_create_factory 函数: {}", e))
                 })?;
@@ -242,10 +242,10 @@ impl CoreLoader {
 
         // 重新加载
         match name {
-            #[cfg(feature = "software-core")]
-            "software" => self.load_software_core().await?,
-            #[cfg(feature = "asic-core")]
-            "asic" => self.load_asic_core().await?,
+            #[cfg(feature = "btc-software")]
+            "btc-software" => self.load_btc_software_core().await?,
+            #[cfg(feature = "maijie-l7")]
+            "maijie-l7" => self.load_maijie_l7_core().await?,
             _ => {
                 return Err(CoreError::runtime(format!("未知的核心类型: {}", name)));
             }
@@ -311,7 +311,7 @@ pub struct LoadStats {
 
 impl std::fmt::Display for LoadStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "已加载核心: {}, 注册工厂: {}, 活跃核心: {}", 
+        write!(f, "已加载核心: {}, 注册工厂: {}, 活跃核心: {}",
                self.total_loaded, self.registered_factories, self.active_cores)
     }
 }

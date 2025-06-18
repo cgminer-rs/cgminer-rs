@@ -1,4 +1,5 @@
 use crate::error::MiningError;
+use crate::monitoring::{MiningMetrics, DeviceMetrics};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -7,31 +8,11 @@ use tokio::sync::{RwLock, Mutex};
 use tokio::time::interval;
 use tracing::info;
 
-/// 临时的挖矿指标结构体（用于hashmeter）
-#[derive(Debug, Clone)]
-pub struct MiningMetrics {
-    pub total_hashrate: f64,
-    pub accepted_shares: u64,
-    pub rejected_shares: u64,
-    pub hardware_errors: u64,
-}
-
-/// 临时的设备指标结构体（用于hashmeter）
-#[derive(Debug, Clone)]
-pub struct DeviceMetrics {
-    pub device_id: u32,
-    pub hashrate: f64,
-    pub accepted_shares: u64,
-    pub rejected_shares: u64,
-    pub hardware_errors: u64,
-    pub temperature: f32,
-    pub fan_speed: u32,
-    pub uptime: Duration,
-}
-
 /// 算力计量器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HashmeterConfig {
+    /// 是否启用算力计量器
+    pub enabled: bool,
     /// 日志输出间隔 (秒)
     pub log_interval: u64,
     /// 是否启用设备级别统计
@@ -47,6 +28,7 @@ pub struct HashmeterConfig {
 impl Default for HashmeterConfig {
     fn default() -> Self {
         Self {
+            enabled: true, // 默认启用
             log_interval: 30, // 30秒间隔，类似传统cgminer
             per_device_stats: true,
             console_output: true,

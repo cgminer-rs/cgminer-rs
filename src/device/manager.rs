@@ -1,16 +1,16 @@
-use crate::config::{DeviceConfig, ChainConfig};
-use crate::error::{DeviceError, MiningError};
+use crate::config::DeviceConfig;
+use crate::error::DeviceError;
 use crate::device::{
-    DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult,
-    MiningDevice, DeviceDriver
+    DeviceInfo, DeviceStats, Work, MiningResult,
+    MiningDevice, factory::UnifiedDeviceFactory,
 };
+use cgminer_core::CoreRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::sync::{RwLock, Mutex, mpsc};
 use tokio::time::interval;
 use tracing::{info, warn, error, debug};
-use uuid::Uuid;
 
 /// 设备管理器
 pub struct DeviceManager {
@@ -20,8 +20,8 @@ pub struct DeviceManager {
     device_info: Arc<RwLock<HashMap<u32, DeviceInfo>>>,
     /// 设备统计信息
     device_stats: Arc<RwLock<HashMap<u32, DeviceStats>>>,
-    /// 设备驱动
-    drivers: Vec<Box<dyn DeviceDriver>>,
+    /// 统一设备工厂
+    device_factory: Arc<Mutex<UnifiedDeviceFactory>>,
     /// 配置
     config: DeviceConfig,
     /// 工作队列发送器
@@ -36,12 +36,14 @@ pub struct DeviceManager {
 
 impl DeviceManager {
     /// 创建新的设备管理器
-    pub fn new(config: DeviceConfig) -> Self {
+    pub fn new(config: DeviceConfig, core_registry: Arc<CoreRegistry>) -> Self {
+        let device_factory = UnifiedDeviceFactory::new(core_registry);
+
         Self {
             devices: Arc::new(RwLock::new(HashMap::new())),
             device_info: Arc::new(RwLock::new(HashMap::new())),
             device_stats: Arc::new(RwLock::new(HashMap::new())),
-            drivers: Vec::new(),
+            device_factory: Arc::new(Mutex::new(device_factory)),
             config,
             work_sender: None,
             result_receiver: None,
@@ -50,98 +52,113 @@ impl DeviceManager {
         }
     }
 
-    /// 注册设备驱动
-    pub fn register_driver(&mut self, driver: Box<dyn DeviceDriver>) {
-        info!("Registering device driver: {}", driver.driver_name());
-        self.drivers.push(driver);
-    }
-
     /// 初始化设备管理器
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
-        info!("Initializing device manager");
+        info!("🔧 初始化设备管理器");
 
-        // 扫描设备
-        self.scan_devices().await?;
+        // 初始化设备工厂
+        {
+            let mut factory = self.device_factory.lock().await;
+            factory.initialize().await?;
+        }
 
-        // 初始化所有设备
-        self.initialize_devices().await?;
+        // 创建设备
+        self.create_devices().await?;
 
-        info!("Device manager initialized successfully");
+        info!("✅ 设备管理器初始化成功");
         Ok(())
     }
 
-    /// 扫描设备
-    pub async fn scan_devices(&mut self) -> Result<Vec<DeviceInfo>, DeviceError> {
-        info!("Scanning for devices");
-        let mut all_devices = Vec::new();
+    /// 创建设备
+    async fn create_devices(&mut self) -> Result<(), DeviceError> {
+        info!("🔧 创建设备");
 
-        for driver in &self.drivers {
-            match driver.scan_devices().await {
-                Ok(devices) => {
-                    info!("Found {} devices with driver {}", devices.len(), driver.driver_name());
-                    all_devices.extend(devices);
+        let factory = self.device_factory.lock().await;
+        let available_types = factory.get_available_device_types();
+        drop(factory);
+
+        if available_types.is_empty() {
+            warn!("⚠️ 没有可用的设备类型");
+            return Ok(());
+        }
+
+        info!("📋 可用设备类型: {:?}", available_types);
+
+        // 为每种可用类型创建设备
+        let mut device_id = 1u32;
+        for device_type in available_types {
+            match self.create_device_of_type(&device_type, device_id).await {
+                Ok(device) => {
+                    // 添加到设备列表
+                    let mut devices = self.devices.write().await;
+                    devices.insert(device_id, Arc::new(Mutex::new(device)));
+
+                    // 创建设备信息
+                    let device_info = DeviceInfo {
+                        id: device_id,
+                        name: format!("{}-{}", device_type, device_id),
+                        device_type: device_type.clone(),
+                        chain_id: 0,
+                        chip_count: 1,
+                        status: crate::device::DeviceStatus::Idle,
+                        temperature: None,
+                        fan_speed: None,
+                        voltage: None,
+                        frequency: None,
+                        hashrate: 0.0,
+                        accepted_shares: 0,
+                        rejected_shares: 0,
+                        hardware_errors: 0,
+                        uptime: Duration::from_secs(0),
+                        last_share_time: None,
+                        created_at: std::time::SystemTime::now(),
+                        updated_at: std::time::SystemTime::now(),
+                    };
+
+                    // 添加到设备信息缓存
+                    let mut info_cache = self.device_info.write().await;
+                    info_cache.insert(device_id, device_info);
+
+                    // 添加到统计信息
+                    let mut stats = self.device_stats.write().await;
+                    stats.insert(device_id, DeviceStats::new());
+
+                    info!("✅ 设备创建成功: {} (ID: {})", device_type, device_id);
+                    device_id += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to scan devices with driver {}: {}", driver.driver_name(), e);
+                    warn!("⚠️ 创建设备失败: {} - {}", device_type, e);
                 }
             }
         }
 
-        // 更新设备信息缓存
-        let mut device_info = self.device_info.write().await;
-        for device in &all_devices {
-            device_info.insert(device.id, device.clone());
-        }
-
-        info!("Total {} devices found", all_devices.len());
-        Ok(all_devices)
-    }
-
-    /// 初始化所有设备
-    pub async fn initialize_devices(&mut self) -> Result<(), DeviceError> {
-        info!("Initializing devices");
-        let device_info = self.device_info.read().await;
-        let mut devices = self.devices.write().await;
-        let mut stats = self.device_stats.write().await;
-
-        for (device_id, info) in device_info.iter() {
-            // 查找合适的驱动
-            let driver = self.drivers.iter()
-                .find(|d| d.supported_devices().contains(&info.device_type.as_str()))
-                .ok_or_else(|| DeviceError::InitializationFailed {
-                    device_id: *device_id,
-                    reason: format!("No driver found for device type: {}", info.device_type),
-                })?;
-
-            // 创建设备实例
-            match driver.create_device(info.clone()).await {
-                Ok(mut device) => {
-                    // 获取设备配置
-                    let device_config = self.get_device_config(info.chain_id);
-
-                    // 初始化设备
-                    match device.initialize(device_config).await {
-                        Ok(_) => {
-                            info!("Device {} initialized successfully", device_id);
-                            devices.insert(*device_id, Arc::new(Mutex::new(device)));
-                            stats.insert(*device_id, DeviceStats::new());
-                        }
-                        Err(e) => {
-                            error!("Failed to initialize device {}: {}", device_id, e);
-                            return Err(e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!("Failed to create device {}: {}", device_id, e);
-                    return Err(e);
-                }
-            }
-        }
-
-        info!("All devices initialized successfully");
         Ok(())
     }
+
+    /// 创建指定类型的设备
+    async fn create_device_of_type(
+        &self,
+        device_type: &str,
+        _device_id: u32,
+    ) -> Result<Box<dyn MiningDevice>, DeviceError> {
+        let factory = self.device_factory.lock().await;
+
+        // 创建设备配置
+        let device_config = crate::device::DeviceConfig {
+            chain_id: 0,
+            enabled: true,
+            frequency: 600,
+            voltage: 12,
+            auto_tune: false,
+            chip_count: 1,
+            temperature_limit: 85.0,
+            fan_speed: None,
+        };
+
+        factory.create_device(device_type, device_config).await
+    }
+
+
 
     /// 启动设备管理器
     pub async fn start(&mut self) -> Result<(), DeviceError> {

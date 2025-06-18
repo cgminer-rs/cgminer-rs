@@ -32,25 +32,25 @@ work_restart_timeout = 60
 scan_time = 30
 
 # =============================================================================
-# 核心配置 (软算法核心和ASIC核心)
+# 核心配置 (重命名后的核心库)
 # =============================================================================
 [cores]
-# 启用的核心列表 - 默认使用软算法核心
-# 可选值: ["software", "asic"] 或 ["software"] 或 ["asic"]
-enabled_cores = ["software"]
+# 启用的核心列表 - 使用重命名后的核心名称
+# 可选值: ["btc-software", "maijie-l7"] 或 ["btc-software"] 或 ["maijie-l7"]
+enabled_cores = ["btc-software"]
 
-# 默认核心 - 软算法核心提供真实的SHA256计算
+# 默认核心 - Bitcoin软算法核心 (cgminer-s-btc-core)
 # 软算法核心使用CPU进行真实的比特币挖矿计算，产生可用的挖矿数据
-default_core = "software"
+default_core = "btc-software"
 
-# 软算法核心配置 (推荐用于开发、测试和低功耗挖矿)
-# 软算法核心特点:
+# Bitcoin软算法核心配置 (cgminer-s-btc-core)
+# Bitcoin软算法核心特点:
 # - 使用真实的SHA256算法进行CPU挖矿
 # - 产生真实可用的挖矿数据和份额
 # - 适合Mac环境和开发测试
 # - 支持多设备并行挖矿
 # - 支持CPU绑定，避免线程切换提升性能
-[cores.software_core]
+[cores.btc_software]
 enabled = true
 device_count = 32            # 增加软算法设备数量以提高总算力
 min_hashrate = 2000000000.0  # 最小算力: 2 GH/s
@@ -60,16 +60,16 @@ batch_size = 4000            # 增大批处理大小提高效率
 work_timeout_ms = 2000       # 减少工作超时提高响应速度
 
 # CPU绑定配置 - 提升挖矿性能和稳定性
-[cores.software_core.cpu_affinity]
+[cores.btc_software.cpu_affinity]
 enabled = true               # 启用CPU绑定
 strategy = "performance_first" # 性能优先策略，优先使用高性能核心
 avoid_hyperthreading = false  # 允许使用超线程提高并发
 prefer_performance_cores = true # 优先使用性能核心
 # manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
 
-# ASIC核心配置 (用于实际ASIC硬件设备)
-# 注意: 在Mac环境下通常不可用，主要用于Linux环境的ASIC设备
-[cores.asic_core]
+# Maijie L7 ASIC核心配置 (cgminer-a-maijie-l7-core)
+# 注意: 在Mac环境下通常不可用，主要用于Linux环境的Maijie L7设备
+[cores.maijie_l7]
 enabled = false              # 默认禁用ASIC核心
 chain_count = 3
 spi_speed = 6000000          # 6MHz
@@ -187,3 +187,26 @@ max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
 min_hashrate = 1.5  # 调整为1.5 GH/s，适合软算法核心的实际性能
+
+# =============================================================================
+# 算力计量器配置 (定期算力输出)
+# =============================================================================
+[hashmeter]
+# 启用算力计量器 - 提供类似传统cgminer的定期算力输出
+enabled = true
+
+# 算力输出间隔 (秒) - 每30秒输出一次算力统计
+log_interval = 30
+
+# 启用设备级别统计 - 显示每个设备的详细算力信息
+per_device_stats = true
+
+# 启用控制台输出 - 在控制台显示算力信息
+console_output = true
+
+# 启用美化输出 - 使用emoji和颜色，符合CGMiner-RS的美化日志风格
+beautiful_output = true
+
+# 算力单位 - 支持 H, KH, MH, GH, TH
+# 对于软算法核心，推荐使用 GH (千兆哈希/秒)
+hashrate_unit = "GH"

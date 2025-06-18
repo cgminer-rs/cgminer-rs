@@ -1,13 +1,13 @@
 [package]
-name = "cgminer-software-core"
+name = "cgminer-a-maijie-l7-core"
 version = "0.1.0"
 edition = "2021"
 authors = ["CGMiner Rust Team"]
-description = "Software algorithm mining core for CGMiner-RS - provides CPU-based mining using real algorithms"
+description = "Maijie L7 ASIC mining core for CGMiner-RS - provides Maijie L7 hardware mining device support"
 license = "GPL-3.0"
 repository = "https://github.com/your-org/cgminer-rs"
-keywords = ["bitcoin", "mining", "software", "cpu", "algorithm"]
-categories = ["hardware-support", "algorithms"]
+keywords = ["bitcoin", "mining", "asic", "maijie-l7", "hardware"]
+categories = ["hardware-support", "embedded"]
 
 [dependencies]
 # Core library
@@ -33,9 +33,9 @@ sha2 = "0.10"
 async-trait = "0.1"
 fastrand = "2.0"
 
-# CPU affinity and system info
-core_affinity = "0.8"
-num_cpus = "1.16"
+# Hardware interface
+libc = "0.2"
+nix = "0.27"
 
 # Logging
 tracing = "0.1"
@@ -44,6 +44,11 @@ tracing = "0.1"
 tokio-test = "0.4"
 mockall = "0.12"
 
+[features]
+default = ["maijie-l7"]
+maijie-l7 = []
+mock-hardware = []
+
 [lib]
-name = "cgminer_software_core"
+name = "cgminer_a_maijie_l7_core"
 crate-type = ["cdylib", "rlib"]

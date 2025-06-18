@@ -1,6 +1,6 @@
-//! 软算法核心性能基准测试
+//! Bitcoin软算法核心性能基准测试 (cgminer-s-btc-core)
 //!
-//! 这个基准测试评估软算法核心的各种性能指标，包括：
+//! 这个基准测试评估Bitcoin软算法核心的各种性能指标，包括：
 //! - SHA256哈希计算性能
 //! - 设备创建和管理性能
 //! - CPU绑定性能
@@ -8,7 +8,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use cgminer_core::{DeviceInfo, DeviceConfig, MiningDevice, Work};
-use cgminer_software_core::{
+use cgminer_s_btc_core::{
     SoftwareMiningCore, SoftwareDevice,
     cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy}
 };

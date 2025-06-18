@@ -7,8 +7,8 @@ CGMiner-RS 采用了模块化的核心架构，将不同类型的挖矿设备驱
 ```
 cgminer-rs (主程序)
 ├── cgminer-core (核心特征和类型定义)
-├── cgminer-software-core (软算法挖矿核心)
-├── cgminer-asic-core (ASIC硬件挖矿核心)
+├── cgminer-s-btc-core (软算法Bitcoin挖矿核心)
+├── cgminer-a-maijie-l7-core (Maijie L7 ASIC硬件挖矿核心)
 └── 其他核心库...
 ```
 
@@ -18,12 +18,12 @@ cgminer-rs (主程序)
 基础库，定义了所有挖矿核心必须实现的特征和类型：
 
 - `MiningCore` - 挖矿核心特征
-- `MiningDevice` - 挖矿设备特征  
+- `MiningDevice` - 挖矿设备特征
 - `CoreFactory` - 核心工厂特征
 - `CoreRegistry` - 核心注册表
 - 基础类型：`Work`, `MiningResult`, `HashRate`, `Temperature` 等
 
-### 2. cgminer-software-core
+### 2. cgminer-s-btc-core
 软算法挖矿核心，使用CPU进行真实的SHA256算法计算：
 
 - 支持多个虚拟设备
@@ -37,7 +37,7 @@ cgminer-rs (主程序)
 - 模拟的温度、电压、频率监控
 - 支持批量处理以优化性能
 
-### 3. cgminer-asic-core
+### 3. cgminer-a-maijie-l7-core
 ASIC硬件挖矿核心，支持真实的ASIC矿机：
 
 - 支持Maijie L7等ASIC矿机
@@ -62,16 +62,16 @@ use cgminer_rs::{CoreLoader, Config};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 创建核心加载器
     let core_loader = CoreLoader::new();
-    
+
     // 加载所有可用的核心
     core_loader.load_all_cores().await?;
-    
+
     // 列出已加载的核心
     let cores = core_loader.list_loaded_cores()?;
     for core in cores {
         println!("已加载核心: {} ({})", core.name, core.core_type);
     }
-    
+
     Ok(())
 }
 ```
@@ -118,7 +118,7 @@ batch_size = 1000
 work_timeout_ms = 5000
 ```
 
-#### ASIC核心配置 (cgminer-asic-core.toml)
+#### ASIC核心配置 (cgminer-a-maijie-l7-core.toml)
 ```toml
 [cores]
 enabled_cores = ["asic"]

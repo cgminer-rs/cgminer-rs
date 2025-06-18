@@ -7,7 +7,7 @@
 //! - 挖矿统计
 
 use cgminer_core::{Work, MiningCore, MiningDevice, DeviceInfo, DeviceStatus, DeviceConfig};
-use cgminer_software_core::{SoftwareMiningCore, SoftwareDevice, cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy}};
+use cgminer_s_btc_core::{SoftwareMiningCore, SoftwareDevice, cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy}};
 use tracing::{info, warn};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;

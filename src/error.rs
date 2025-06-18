@@ -58,6 +58,9 @@ pub enum DeviceError {
 
     #[error("Device timeout: {device_id}")]
     Timeout { device_id: u32 },
+
+    #[error("Unsupported device type: {device_type}")]
+    UnsupportedDevice { device_type: String },
 }
 
 #[derive(Error, Debug, Clone)]
@@ -210,6 +213,9 @@ impl DeviceError {
             }
             DeviceError::InitializationFailed { .. } => {
                 RecoveryStrategy::Retry { max_attempts: 5, delay_ms: 2000 }
+            }
+            DeviceError::UnsupportedDevice { .. } => {
+                RecoveryStrategy::Ignore
             }
             _ => RecoveryStrategy::Ignore,
         }

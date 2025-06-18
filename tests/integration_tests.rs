@@ -4,7 +4,7 @@ use cgminer_rs::device::{DeviceManager, DeviceInfo};
 use cgminer_rs::pool::PoolManager;
 use cgminer_rs::monitoring::MonitoringSystem;
 use cgminer_core::{DeviceConfig as CoreDeviceConfig, Work, MiningCore};
-use cgminer_software_core::SoftwareMiningCore;
+use cgminer_s_btc_core::SoftwareMiningCore;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
@@ -256,9 +256,9 @@ fn create_test_config() -> Config {
             scan_time: 5,
         },
         cores: cgminer_rs::config::CoresConfig {
-            enabled_cores: vec!["software".to_string()],
-            default_core: "software".to_string(),
-            software_core: Some(cgminer_rs::config::SoftwareCoreConfig {
+            enabled_cores: vec!["btc-software".to_string()],
+            default_core: "btc-software".to_string(),
+            btc_software: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
                 enabled: true,
                 device_count: 4,
                 min_hashrate: 1_000_000_000.0,
@@ -268,7 +268,7 @@ fn create_test_config() -> Config {
                 work_timeout_ms: 5000,
                 cpu_affinity: None,
             }),
-            asic_core: None,
+            maijie_l7: None,
         },
         devices: cgminer_rs::config::DeviceConfig {
             auto_detect: true,
@@ -460,7 +460,7 @@ impl cgminer_rs::device::MiningDevice for TestMiningDevice {
     }
 }
 
-// ==================== 软算法核心集成测试 ====================
+// ==================== Bitcoin软算法核心集成测试 (cgminer-s-btc-core) ====================
 
 /// 创建测试用的工作
 fn create_test_work(id: u64) -> Work {
@@ -510,11 +510,11 @@ fn create_test_work(id: u64) -> Work {
     }
 }
 
-/// 测试软算法核心的基本生命周期
+/// 测试Bitcoin软算法核心的基本生命周期
 #[tokio::test]
-async fn test_software_core_lifecycle() {
-    // 创建软算法核心
-    let mut core = SoftwareMiningCore::new("集成测试核心".to_string());
+async fn test_btc_software_core_lifecycle() {
+    // 创建Bitcoin软算法核心
+    let mut core = SoftwareMiningCore::new("Bitcoin集成测试核心".to_string());
 
     // 验证初始状态
     let info = core.get_info();

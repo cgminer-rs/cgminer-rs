@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use crate::mining::HashmeterConfig;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -35,6 +36,7 @@ pub struct Config {
     pub pools: PoolConfig,
     pub api: ApiConfig,
     pub monitoring: MonitoringConfig,
+    pub hashmeter: HashmeterConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,12 +52,12 @@ pub struct GeneralConfig {
 pub struct CoresConfig {
     pub enabled_cores: Vec<String>,
     pub default_core: String,
-    pub software_core: Option<SoftwareCoreConfig>,
-    pub asic_core: Option<AsicCoreConfig>,
+    pub btc_software: Option<BtcSoftwareCoreConfig>,
+    pub maijie_l7: Option<MaijieL7CoreConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SoftwareCoreConfig {
+pub struct BtcSoftwareCoreConfig {
     pub enabled: bool,
     pub device_count: u32,
     pub min_hashrate: f64,
@@ -78,7 +80,7 @@ pub struct CpuAffinityConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AsicCoreConfig {
+pub struct MaijieL7CoreConfig {
     pub enabled: bool,
     pub chain_count: u32,
     pub spi_speed: u32,
@@ -174,9 +176,9 @@ impl Default for Config {
                 scan_time: 30,
             },
             cores: CoresConfig {
-                enabled_cores: vec!["software".to_string()],
-                default_core: "software".to_string(),
-                software_core: Some(SoftwareCoreConfig {
+                enabled_cores: vec!["btc-software".to_string()],
+                default_core: "btc-software".to_string(),
+                btc_software: Some(BtcSoftwareCoreConfig {
                     enabled: true,
                     device_count: 4,
                     min_hashrate: 1_000_000_000.0, // 1 GH/s
@@ -190,7 +192,7 @@ impl Default for Config {
                         manual_mapping: None,
                     }),
                 }),
-                asic_core: Some(AsicCoreConfig {
+                maijie_l7: Some(MaijieL7CoreConfig {
                     enabled: false,
                     chain_count: 3,
                     spi_speed: 6_000_000, // 6MHz
@@ -261,6 +263,7 @@ impl Default for Config {
                     min_hashrate: 50.0,
                 },
             },
+            hashmeter: HashmeterConfig::default(),
         }
     }
 }
@@ -298,39 +301,39 @@ impl Config {
             anyhow::bail!("Default core '{}' must be in enabled cores list", self.cores.default_core);
         }
 
-        // 验证软算法核心配置
-        if let Some(software_config) = &self.cores.software_core {
-            if software_config.enabled {
-                if software_config.device_count == 0 {
-                    anyhow::bail!("Software core device count must be greater than 0");
+        // 验证Bitcoin软算法核心配置
+        if let Some(btc_software_config) = &self.cores.btc_software {
+            if btc_software_config.enabled {
+                if btc_software_config.device_count == 0 {
+                    anyhow::bail!("Bitcoin software core device count must be greater than 0");
                 }
-                if software_config.device_count > 100 {
-                    anyhow::bail!("Software core device count cannot exceed 100");
+                if btc_software_config.device_count > 100 {
+                    anyhow::bail!("Bitcoin software core device count cannot exceed 100");
                 }
-                if software_config.min_hashrate >= software_config.max_hashrate {
-                    anyhow::bail!("Software core min_hashrate must be less than max_hashrate");
+                if btc_software_config.min_hashrate >= btc_software_config.max_hashrate {
+                    anyhow::bail!("Bitcoin software core min_hashrate must be less than max_hashrate");
                 }
-                if software_config.error_rate < 0.0 || software_config.error_rate > 1.0 {
-                    anyhow::bail!("Software core error_rate must be between 0.0 and 1.0");
+                if btc_software_config.error_rate < 0.0 || btc_software_config.error_rate > 1.0 {
+                    anyhow::bail!("Bitcoin software core error_rate must be between 0.0 and 1.0");
                 }
             }
         }
 
-        // 验证ASIC核心配置
-        if let Some(asic_config) = &self.cores.asic_core {
-            if asic_config.enabled {
-                if asic_config.chain_count == 0 {
-                    anyhow::bail!("ASIC core chain count must be greater than 0");
+        // 验证Maijie L7 ASIC核心配置
+        if let Some(maijie_l7_config) = &self.cores.maijie_l7 {
+            if maijie_l7_config.enabled {
+                if maijie_l7_config.chain_count == 0 {
+                    anyhow::bail!("Maijie L7 core chain count must be greater than 0");
                 }
-                if asic_config.chain_count > 16 {
-                    anyhow::bail!("ASIC core chain count cannot exceed 16");
+                if maijie_l7_config.chain_count > 16 {
+                    anyhow::bail!("Maijie L7 core chain count cannot exceed 16");
                 }
-                if asic_config.spi_speed == 0 || asic_config.spi_speed > 50_000_000 {
-                    anyhow::bail!("ASIC core SPI speed must be between 1 and 50,000,000 Hz");
+                if maijie_l7_config.spi_speed == 0 || maijie_l7_config.spi_speed > 50_000_000 {
+                    anyhow::bail!("Maijie L7 core SPI speed must be between 1 and 50,000,000 Hz");
                 }
                 let valid_bauds = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
-                if !valid_bauds.contains(&asic_config.uart_baud) {
-                    anyhow::bail!("ASIC core UART baud rate must be a standard value");
+                if !valid_bauds.contains(&maijie_l7_config.uart_baud) {
+                    anyhow::bail!("Maijie L7 core UART baud rate must be a standard value");
                 }
             }
         }
