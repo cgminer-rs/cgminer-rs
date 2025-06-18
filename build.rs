@@ -10,7 +10,7 @@ fn main() {
     println!("cargo:rerun-if-changed=Cargo.toml");
 
     // 获取目标信息
-    let target = env::var("TARGET").unwrap();
+    let _target = env::var("TARGET").unwrap();
     let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap();
 
@@ -89,7 +89,7 @@ fn generate_bindings(out_path: &PathBuf) {
     // 使用 bindgen 生成 Rust 绑定
     let bindings = bindgen::Builder::default()
         .header("drivers/maijie_l7.h")
-        .parse_callbacks(Box::new(bindgen::CargoCallbacks))
+        .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
 

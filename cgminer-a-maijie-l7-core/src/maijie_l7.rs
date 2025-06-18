@@ -8,8 +8,7 @@ use cgminer_core::{
 };
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
-use tokio::time::Instant;
+
 use tracing::{debug, info, warn};
 
 /// Maijie L7 设备驱动

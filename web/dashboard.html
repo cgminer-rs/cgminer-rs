@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CGMiner-RS 监控面板</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>⛏️ CGMiner-RS 监控面板</h1>
+            <div class="status-indicator" id="status-indicator">
+                <span class="status-dot" id="status-dot"></span>
+                <span id="status-text">连接中...</span>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- 概览卡片 -->
+            <section class="overview-cards">
+                <div class="card">
+                    <div class="card-header">
+                        <h3>⚡ 总算力</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="metric-value" id="total-hashrate">0.00 GH/s</div>
+                        <div class="metric-label">当前算力</div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>📊 份额统计</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="metric-row">
+                            <span class="metric-label">接受:</span>
+                            <span class="metric-value" id="accepted-shares">0</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">拒绝:</span>
+                            <span class="metric-value" id="rejected-shares">0</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">拒绝率:</span>
+                            <span class="metric-value" id="reject-rate">0.00%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>🌡️ 系统状态</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="metric-row">
+                            <span class="metric-label">温度:</span>
+                            <span class="metric-value" id="temperature">0°C</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">内存:</span>
+                            <span class="metric-value" id="memory-usage">0%</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">功耗:</span>
+                            <span class="metric-value" id="power-consumption">0W</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>⏱️ 运行统计</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="metric-row">
+                            <span class="metric-label">运行时间:</span>
+                            <span class="metric-value" id="uptime">0小时</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">活跃设备:</span>
+                            <span class="metric-value" id="active-devices">0</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label">效率:</span>
+                            <span class="metric-value" id="efficiency">0 MH/J</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 设备状态 -->
+            <section class="devices-section">
+                <h2>🔧 设备状态</h2>
+                <div class="devices-grid" id="devices-grid">
+                    <div class="no-data">暂无设备数据</div>
+                </div>
+            </section>
+
+            <!-- 矿池状态 -->
+            <section class="pools-section">
+                <h2>🏊 矿池状态</h2>
+                <div class="pools-grid" id="pools-grid">
+                    <div class="no-data">暂无矿池数据</div>
+                </div>
+            </section>
+
+            <!-- 详细统计 -->
+            <section class="stats-section">
+                <h2>📈 详细统计</h2>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">总运行时间</div>
+                        <div class="stat-value" id="total-runtime">0小时</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">总份额数</div>
+                        <div class="stat-value" id="total-shares">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">平均算力</div>
+                        <div class="stat-value" id="average-hashrate">0 GH/s</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">最佳份额</div>
+                        <div class="stat-value" id="best-share">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">硬件错误</div>
+                        <div class="stat-value" id="hardware-errors">0</div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>CGMiner-RS 简化监控系统 | 最后更新: <span id="last-update">--</span></p>
+        </footer>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>

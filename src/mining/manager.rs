@@ -4,14 +4,13 @@ use crate::device::{DeviceManager, Work, MiningResult};
 use crate::pool::PoolManager;
 use crate::monitoring::{MonitoringSystem, MiningMetrics};
 use crate::mining::{MiningState, MiningStats, MiningConfig, MiningEvent, WorkItem, ResultItem, Hashmeter};
-use cgminer_core::{CoreRegistry, CoreType, CoreConfig, MiningCore, Work as CoreWork, MiningResult as CoreResult};
+use cgminer_core::{CoreRegistry, CoreType, CoreConfig, MiningCore};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::collections::HashMap;
 use tokio::sync::{RwLock, Mutex, mpsc, broadcast};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{info, warn, error, debug};
-use uuid::Uuid;
 
 /// 挖矿管理器 - 协调所有子系统
 pub struct MiningManager {
@@ -112,7 +111,7 @@ impl MiningManager {
 
     /// 根据配置的核心类型注册相应的设备驱动
     async fn register_drivers_for_cores(
-        device_manager: &mut DeviceManager,
+        _device_manager: &mut DeviceManager,
         cores_config: &crate::config::CoresConfig
     ) -> Result<(), MiningError> {
         info!("根据配置注册设备驱动，启用的核心: {:?}", cores_config.enabled_cores);
@@ -200,13 +199,13 @@ impl MiningManager {
 
         // 启动矿池管理器
         {
-            let mut pool_manager = self.pool_manager.lock().await;
+            let pool_manager = self.pool_manager.lock().await;
             pool_manager.start().await?;
         }
 
         // 启动监控系统
         {
-            let mut monitoring_system = self.monitoring_system.lock().await;
+            let monitoring_system = self.monitoring_system.lock().await;
             monitoring_system.start().await?;
         }
 
@@ -264,13 +263,13 @@ impl MiningManager {
 
         // 停止监控系统
         {
-            let mut monitoring_system = self.monitoring_system.lock().await;
+            let monitoring_system = self.monitoring_system.lock().await;
             monitoring_system.stop().await?;
         }
 
         // 停止矿池管理器
         {
-            let mut pool_manager = self.pool_manager.lock().await;
+            let pool_manager = self.pool_manager.lock().await;
             pool_manager.stop().await?;
         }
 
@@ -353,8 +352,8 @@ impl MiningManager {
         let stats = self.stats.clone();
         let device_manager = self.device_manager.clone();
         let pool_manager = self.pool_manager.clone();
-        let monitoring_system = self.monitoring_system.clone();
-        let event_sender = self.event_sender.clone();
+        let _monitoring_system = self.monitoring_system.clone();
+        let _event_sender = self.event_sender.clone();
         let scan_interval = self.config.scan_interval;
 
         let handle = tokio::spawn(async move {
@@ -376,12 +375,12 @@ impl MiningManager {
                 }
 
                 // 检查设备健康状态
-                if let Ok(device_manager) = device_manager.try_lock() {
+                if let Ok(_device_manager) = device_manager.try_lock() {
                     // 这里可以添加设备健康检查逻辑
                 }
 
                 // 检查矿池连接状态
-                if let Ok(pool_manager) = pool_manager.try_lock() {
+                if let Ok(_pool_manager) = pool_manager.try_lock() {
                     // 这里可以添加矿池连接检查逻辑
                 }
             }
@@ -399,7 +398,7 @@ impl MiningManager {
         let work_receiver = self.work_receiver.clone();
 
         let handle = tokio::spawn(async move {
-            let mut receiver = work_receiver.lock().await.take();
+            let receiver = work_receiver.lock().await.take();
             if let Some(mut receiver) = receiver {
                 while *running.read().await {
                     match receiver.recv().await {
@@ -466,7 +465,7 @@ impl MiningManager {
         let event_sender = self.event_sender.clone();
 
         let handle = tokio::spawn(async move {
-            let mut receiver = result_receiver.lock().await.take();
+            let receiver = result_receiver.lock().await.take();
             if let Some(mut receiver) = receiver {
                 while *running.read().await {
                     match receiver.recv().await {
@@ -474,7 +473,7 @@ impl MiningManager {
                             // 处理挖矿结果
                             if result_item.is_valid() {
                                 // 提交到矿池
-                                if let Ok(pool_manager) = pool_manager.try_lock() {
+                                if let Ok(_pool_manager) = pool_manager.try_lock() {
                                     // 这里需要实现份额提交逻辑
                                 }
 
@@ -509,7 +508,7 @@ impl MiningManager {
         let result_sender = self.result_sender.clone();
         let stats = self.stats.clone();
 
-        let handle = tokio::spawn(async move {
+        let _handle = tokio::spawn(async move {
             let mut interval = interval(Duration::from_millis(100)); // 每100ms检查一次结果
 
             while *running.read().await {
@@ -693,7 +692,7 @@ impl MiningManager {
 
     /// 启动算力计量器
     async fn start_hashmeter(&self) -> Result<(), MiningError> {
-        let mut hashmeter_guard = self.hashmeter.lock().await;
+        let hashmeter_guard = self.hashmeter.lock().await;
         if let Some(hashmeter) = hashmeter_guard.as_ref() {
             hashmeter.start().await?;
             info!("📊 Hashmeter started successfully");
@@ -705,8 +704,8 @@ impl MiningManager {
     async fn start_hashmeter_updates(&self) -> Result<(), MiningError> {
         let hashmeter = self.hashmeter.clone();
         let stats = self.stats.clone();
-        let device_manager = self.device_manager.clone();
-        let monitoring_system = self.monitoring_system.clone();
+        let _device_manager = self.device_manager.clone();
+        let _monitoring_system = self.monitoring_system.clone();
         let running = self.running.clone();
 
         let handle = tokio::spawn(async move {
@@ -755,7 +754,7 @@ impl MiningManager {
     async fn stop_tasks(&self) {
         // 停止算力计量器
         {
-            let mut hashmeter_guard = self.hashmeter.lock().await;
+            let hashmeter_guard = self.hashmeter.lock().await;
             if let Some(hashmeter) = hashmeter_guard.as_ref() {
                 if let Err(e) = hashmeter.stop().await {
                     warn!("Failed to stop hashmeter: {}", e);

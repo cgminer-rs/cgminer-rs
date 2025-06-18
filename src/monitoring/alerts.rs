@@ -4,7 +4,7 @@ use crate::monitoring::{SystemMetrics, DeviceMetrics};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
-use tracing::{info, warn, debug};
+use tracing::{info, debug};
 use uuid::Uuid;
 
 /// 告警类型

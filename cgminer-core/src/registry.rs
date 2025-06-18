@@ -107,7 +107,7 @@ impl CoreRegistry {
     /// 创建核心实例
     pub async fn create_core(&self, factory_name: &str, config: CoreConfig) -> Result<String, CoreError> {
         // 获取工厂
-        let factory = {
+        let _factory = {
             let factories = self.factories.read().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire read lock: {}", e))
             })?;
@@ -122,7 +122,7 @@ impl CoreRegistry {
             let factories = self.factories.read().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire read lock: {}", e))
             })?;
-            
+
             if let Some(factory) = factories.get(factory_name) {
                 factory.validate_config(&config)?;
             }
@@ -133,7 +133,7 @@ impl CoreRegistry {
             let factories = self.factories.read().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire read lock: {}", e))
             })?;
-            
+
             if let Some(factory) = factories.get(factory_name) {
                 factory.create_core(config.clone()).await?
             } else {
@@ -149,7 +149,7 @@ impl CoreRegistry {
             let mut active_cores = self.active_cores.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
-            
+
             active_cores.insert(core_id.clone(), core);
         }
 

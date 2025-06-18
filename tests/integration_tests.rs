@@ -96,11 +96,12 @@ min_hashrate = 30.0
 #[tokio::test]
 async fn test_device_manager() {
     let config = create_test_config();
-    let mut device_manager = DeviceManager::new(config.devices.clone());
+    let core_loader = cgminer_rs::CoreLoader::new();
+    core_loader.load_all_cores().await.expect("Failed to load cores");
+    let core_registry = core_loader.registry();
+    let mut device_manager = DeviceManager::new(config.devices.clone(), core_registry);
 
-    // 注册测试驱动
-    let test_driver = Box::new(TestDeviceDriver::new());
-    device_manager.register_driver(test_driver);
+    // 注册测试驱动 - 现在通过核心注册表处理
 
     // 测试初始化
     device_manager.initialize().await.expect("Failed to initialize device manager");
@@ -330,6 +331,14 @@ fn create_test_config() -> Config {
                 max_error_rate: 5.0,
                 min_hashrate: 30.0,
             },
+        },
+        hashmeter: cgminer_rs::mining::HashmeterConfig {
+            enabled: true,
+            log_interval: 30,
+            per_device_stats: true,
+            console_output: true,
+            beautiful_output: true,
+            hashrate_unit: "GH".to_string(),
         },
     }
 }

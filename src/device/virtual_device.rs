@@ -7,8 +7,7 @@ use async_trait::async_trait;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, Instant};
 use tokio::sync::{RwLock, Mutex};
-use tracing::{info, warn, error, debug};
-use uuid::Uuid;
+use tracing::{info, debug};
 use fastrand;
 use sha2::{Sha256, Digest};
 

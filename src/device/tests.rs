@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use super::*;
+
     use crate::device::{DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult, DeviceConfig};
     use crate::device::virtual_device::{VirtualDeviceDriver, VirtualDevice};
     use crate::device::traits::{MiningDevice, DeviceDriver};

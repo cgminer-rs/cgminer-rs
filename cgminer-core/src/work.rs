@@ -53,7 +53,7 @@ impl WorkQueue {
 
         debug!("添加工作到队列: {}", work.id);
         pending.push_back(work);
-        
+
         // 通知等待的任务
         self.notify.notify_one();
         Ok(())
@@ -73,7 +73,7 @@ impl WorkQueue {
             let mut active = self.active_work.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
-            
+
             active.insert(work.id, work.clone());
             debug!("获取工作: {}", work.id);
             Ok(Some(work))
@@ -107,7 +107,7 @@ impl WorkQueue {
             let mut completed = self.completed_work.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
-            
+
             completed.insert(work_id, result);
             debug!("工作完成: {}", work_id);
             Ok(())
@@ -140,7 +140,7 @@ impl WorkQueue {
 
     /// 清理过期的工作
     fn cleanup_expired_work(&self, pending: &mut VecDeque<Work>) -> Result<(), CoreError> {
-        let now = SystemTime::now();
+        let _now = SystemTime::now();
         let mut expired_count = 0;
 
         // 从前面开始移除过期的工作

@@ -7,9 +7,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::{RwLock, Mutex, mpsc, broadcast};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{info, warn, error, debug};
-use uuid::Uuid;
 
 /// 矿池管理器
 pub struct PoolManager {
@@ -365,7 +364,7 @@ impl PoolManager {
         if let Some(pool_id) = *active_pool_id {
             let stratum_clients = self.stratum_clients.read().await;
             if let Some(stratum_client) = stratum_clients.get(&pool_id) {
-                let mut client = stratum_client.lock().await;
+                let client = stratum_client.lock().await;
 
                 // 发送份额提交事件
                 self.send_event(PoolEvent::ShareSubmitted {
@@ -421,7 +420,7 @@ impl PoolManager {
         if let Some(pool_id) = *active_pool_id {
             let stratum_clients = self.stratum_clients.read().await;
             if let Some(stratum_client) = stratum_clients.get(&pool_id) {
-                let mut client = stratum_client.lock().await;
+                let client = stratum_client.lock().await;
 
                 match client.get_work().await {
                     Ok(work) => {
@@ -482,9 +481,9 @@ impl PoolManager {
     /// 启动连接管理任务
     async fn start_connection_management(&self) -> Result<(), PoolError> {
         let running = self.running.clone();
-        let pools = self.pools.clone();
-        let stratum_clients = self.stratum_clients.clone();
-        let active_pool = self.active_pool.clone();
+        let _pools = self.pools.clone();
+        let _stratum_clients = self.stratum_clients.clone();
+        let _active_pool = self.active_pool.clone();
         let config = self.config.clone();
 
         let handle = tokio::spawn(async move {
@@ -529,7 +528,7 @@ impl PoolManager {
                         drop(pool_guard); // 释放锁
                     }
 
-                    if let Ok(mut client) = client.try_lock() {
+                    if let Ok(client) = client.try_lock() {
                         if let Err(e) = client.ping().await {
                             warn!("Heartbeat failed for pool {}: {}", pool_id, e);
                         } else {

@@ -42,7 +42,7 @@ tokio-tungstenite = "0.20"
 
 # Logging
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 tracing-appender = "0.2"
 
 # Error handling
@@ -71,8 +71,19 @@ tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
 futures-util = "0.3"
 
+# Security and authentication
+jsonwebtoken = "9.2"
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+base64 = "0.21"
+
 # Dynamic library loading
-libloading = "0.8"
+libloading = { version = "0.8", optional = true }
+num_cpus = "1.17.0"
+
+# Web server for Prometheus metrics
+warp = "0.3"
 
 [build-dependencies]
 cc = "1.0"
@@ -126,6 +137,7 @@ software-only = ["btc-software"]
 # 其他特性
 web-ui = []
 metrics = ["prometheus"]
+dynamic-loading = ["libloading"]
 
 [[bench]]
 name = "btc_software_core_benchmark"

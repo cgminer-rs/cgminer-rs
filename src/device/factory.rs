@@ -2,12 +2,12 @@
 //!
 //! 通过工厂模式统一设备创建，避免直接依赖核心库
 
-use crate::device::{DeviceConfig, MiningDevice, DeviceInfo, conversion};
+use crate::device::{DeviceConfig, MiningDevice, DeviceInfo};
 use crate::error::DeviceError;
 use cgminer_core::{CoreRegistry, CoreConfig};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 
 /// 统一设备工厂
 ///

@@ -3,13 +3,8 @@ pub mod work_queue;
 pub mod hashmeter;
 
 use crate::config::Config;
-use crate::error::MiningError;
-use crate::device::{DeviceManager, Work, MiningResult};
-use crate::pool::PoolManager;
-use crate::monitoring::MonitoringSystem;
+use crate::device::{Work, MiningResult};
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-use tokio::sync::{RwLock, Mutex};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 

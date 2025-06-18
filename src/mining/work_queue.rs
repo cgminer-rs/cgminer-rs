@@ -1,11 +1,11 @@
 use crate::device::{Work, MiningResult};
 use crate::error::WorkError;
-use crate::mining::{WorkItem, ResultItem, WorkDistributionStrategy, ValidationStatus};
+use crate::mining::{WorkItem, ResultItem, WorkDistributionStrategy};
 use std::collections::{VecDeque, HashMap};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
-use tokio::sync::{RwLock, Mutex, mpsc, Notify};
-use tracing::{info, warn, error, debug};
+use std::time::Duration;
+use tokio::sync::{RwLock, Mutex, Notify};
+use tracing::{info, debug};
 use uuid::Uuid;
 
 /// 工作队列

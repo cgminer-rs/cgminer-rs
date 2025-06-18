@@ -5,7 +5,7 @@ use cgminer_core::{
     DeviceInfo, MiningDevice, Work, MiningResult
 };
 use crate::device::SoftwareDevice;
-use crate::performance::{PerformanceConfig, PerformanceOptimizer};
+use crate::performance::PerformanceOptimizer;
 use crate::cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy};
 use async_trait::async_trait;
 use std::collections::HashMap;

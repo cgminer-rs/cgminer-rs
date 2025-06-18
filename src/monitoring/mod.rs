@@ -1,18 +1,16 @@
 pub mod system;
 pub mod metrics;
 pub mod alerts;
+pub mod simple_web;
 
-use crate::error::MiningError;
-use crate::config::MonitoringConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::sync::RwLock;
 
 pub use system::MonitoringSystem;
 pub use metrics::{MetricsCollector, Metric, MetricType};
 pub use alerts::{AlertManager, Alert, AlertType, AlertSeverity};
+pub use simple_web::SimpleWebMonitor;
 
 /// 系统指标
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,7 +200,7 @@ impl MonitoringEvent {
             MonitoringEvent::AlertResolved { timestamp, .. } => *timestamp,
         }
     }
-    
+
     pub fn event_type(&self) -> &'static str {
         match self {
             MonitoringEvent::SystemMetricsUpdate { .. } => "system_metrics_update",
@@ -250,21 +248,21 @@ impl MetricsHistory {
             max_entries,
         }
     }
-    
+
     pub fn add_system_metrics(&mut self, metrics: SystemMetrics) {
         self.system_metrics.push(metrics);
         if self.system_metrics.len() > self.max_entries {
             self.system_metrics.remove(0);
         }
     }
-    
+
     pub fn add_mining_metrics(&mut self, metrics: MiningMetrics) {
         self.mining_metrics.push(metrics);
         if self.mining_metrics.len() > self.max_entries {
             self.mining_metrics.remove(0);
         }
     }
-    
+
     pub fn add_device_metrics(&mut self, device_id: u32, metrics: DeviceMetrics) {
         let device_history = self.device_metrics.entry(device_id).or_insert_with(Vec::new);
         device_history.push(metrics);
@@ -272,7 +270,7 @@ impl MetricsHistory {
             device_history.remove(0);
         }
     }
-    
+
     pub fn add_pool_metrics(&mut self, pool_id: u32, metrics: PoolMetrics) {
         let pool_history = self.pool_metrics.entry(pool_id).or_insert_with(Vec::new);
         pool_history.push(metrics);
@@ -280,23 +278,23 @@ impl MetricsHistory {
             pool_history.remove(0);
         }
     }
-    
+
     pub fn get_latest_system_metrics(&self) -> Option<&SystemMetrics> {
         self.system_metrics.last()
     }
-    
+
     pub fn get_latest_mining_metrics(&self) -> Option<&MiningMetrics> {
         self.mining_metrics.last()
     }
-    
+
     pub fn get_latest_device_metrics(&self, device_id: u32) -> Option<&DeviceMetrics> {
         self.device_metrics.get(&device_id)?.last()
     }
-    
+
     pub fn get_latest_pool_metrics(&self, pool_id: u32) -> Option<&PoolMetrics> {
         self.pool_metrics.get(&pool_id)?.last()
     }
-    
+
     pub fn clear(&mut self) {
         self.system_metrics.clear();
         self.mining_metrics.clear();
@@ -306,7 +304,7 @@ impl MetricsHistory {
 }
 
 /// 性能统计
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct PerformanceStats {
     pub metrics_collection_time: Duration,
     pub alert_processing_time: Duration,
@@ -321,12 +319,12 @@ impl PerformanceStats {
         self.total_metrics_collected += 1;
         self.last_collection_time = Some(SystemTime::now());
     }
-    
+
     pub fn record_alert_processing_time(&mut self, duration: Duration) {
         self.alert_processing_time = duration;
         self.total_alerts_triggered += 1;
     }
-    
+
     pub fn get_average_collection_time(&self) -> Duration {
         if self.total_metrics_collected == 0 {
             Duration::from_secs(0)

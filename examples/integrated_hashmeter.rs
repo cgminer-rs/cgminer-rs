@@ -1,5 +1,5 @@
 use cgminer_rs::mining::{Hashmeter, HashmeterConfig};
-use cgminer_rs::mining::hashmeter::{MiningMetrics, DeviceMetrics};
+use cgminer_rs::monitoring::{MiningMetrics, DeviceMetrics};
 use std::time::{Duration, SystemTime};
 use tokio::time::{interval, sleep};
 use tracing::{info, warn};
@@ -21,6 +21,7 @@ async fn main() {
 
     // 创建算力计量器配置
     let hashmeter_config = HashmeterConfig {
+        enabled: true,              // 启用算力计量器
         log_interval: 30,           // 30秒间隔
         per_device_stats: true,     // 显示设备级统计
         console_output: true,       // 控制台输出
@@ -133,10 +134,19 @@ fn generate_mock_mining_metrics(iteration: u32) -> MiningMetrics {
     let total_hashrate = hashrate_ghps * 1_000_000_000.0; // 转换为 H/s
 
     MiningMetrics {
+        timestamp: SystemTime::now(),
         total_hashrate,
         accepted_shares: 1200 + iteration as u64 * 2,
         rejected_shares: 25 + iteration as u64 / 10,
         hardware_errors: 3 + iteration as u64 / 20,
+        stale_shares: 0,
+        best_share: 0.0,
+        current_difficulty: 1.0,
+        network_difficulty: 1.0,
+        blocks_found: 0,
+        efficiency: 0.0,
+        active_devices: 4,
+        connected_pools: 1,
     }
 }
 
@@ -156,13 +166,18 @@ fn generate_mock_device_metrics(device_id: u32, iteration: u32) -> DeviceMetrics
 
     DeviceMetrics {
         device_id,
+        timestamp: SystemTime::now(),
+        temperature: 65.0 + device_id as f32 * 2.0 + fastrand::f32() * 5.0,
         hashrate: hashrate_hps,
+        power_consumption: 1500.0 + device_id as f64 * 100.0,
+        fan_speed: 70 + device_id * 5 + fastrand::u32(0..10),
+        voltage: 12000 + device_id * 100,
+        frequency: 600 + device_id * 25,
+        error_rate: 0.01,
+        uptime: Duration::from_secs(iteration as u64 * 5),
         accepted_shares: 300 + device_id as u64 * 50 + iteration as u64 / 2,
         rejected_shares: 5 + device_id as u64 + iteration as u64 / 20,
         hardware_errors: device_id as u64 / 2 + iteration as u64 / 50,
-        temperature: 65.0 + device_id as f32 * 2.0 + fastrand::f32() * 5.0,
-        fan_speed: 70 + device_id * 5 + fastrand::u32(0..10),
-        uptime: Duration::from_secs(iteration as u64 * 5),
     }
 }
 

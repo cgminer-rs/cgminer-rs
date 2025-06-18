@@ -8,7 +8,6 @@ pub mod factory;
 #[cfg(test)]
 mod tests;
 
-use crate::error::DeviceError;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;

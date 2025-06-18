@@ -278,7 +278,7 @@ pub struct HealthStatus {
 /// API 中间件
 pub mod middleware {
     use crate::api::ApiResponse;
-    use crate::error::ApiError;
+
     use axum::{
         extract::Request,
         http::{HeaderMap, StatusCode},
@@ -297,7 +297,7 @@ pub mod middleware {
         if let Some(auth_header) = headers.get("Authorization") {
             if let Ok(auth_str) = auth_header.to_str() {
                 if auth_str.starts_with("Bearer ") {
-                    let token = &auth_str[7..];
+                    let _token = &auth_str[7..];
                     // 这里应该验证令牌
                     // 为了简化，我们假设所有令牌都有效
                     return Ok(next.run(request).await);

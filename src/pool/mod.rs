@@ -1,9 +1,11 @@
 pub mod manager;
 pub mod stratum;
 pub mod connection;
+pub mod scheduler;
+pub mod switcher;
 
 use crate::error::PoolError;
-use crate::device::{Work, MiningResult};
+use crate::device::Work;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -11,6 +13,8 @@ use uuid::Uuid;
 pub use manager::PoolManager;
 pub use stratum::{StratumClient, StratumMessage};
 pub use connection::PoolConnection;
+pub use scheduler::{PoolScheduler, PoolQuota, FailoverConfig, SchedulerStats};
+pub use switcher::{PoolSwitcher, PoolMetrics, SwitchConfig, SwitchEvent, SwitchReason};
 
 /// 矿池信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

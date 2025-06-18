@@ -8,9 +8,13 @@ pub mod config;
 pub mod core_loader;
 pub mod device;
 pub mod error;
+pub mod logging;
 pub mod mining;
 pub mod monitoring;
+pub mod performance;
 pub mod pool;
+pub mod security;
+pub mod web;
 
 // Re-export commonly used types
 pub use core_loader::{CoreLoader, LoadStats};

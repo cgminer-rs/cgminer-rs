@@ -3,10 +3,9 @@
 use cgminer_core::DeviceError;
 use async_trait::async_trait;
 use std::time::Duration;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write, Seek, SeekFrom};
+
 use std::path::Path;
-use tracing::{debug, warn, error};
+use tracing::debug;
 
 /// 硬件接口特征
 #[async_trait]

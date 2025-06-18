@@ -3,10 +3,8 @@ pub mod handlers;
 pub mod websocket;
 pub mod auth;
 
-use crate::error::ApiError;
 use crate::mining::MiningManager;
 use axum::{
-    extract::State,
     http::StatusCode,
     response::Json,
     routing::{get, post},

@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock, Mutex};
 use tokio::time::{interval, Duration};
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 use uuid::Uuid;
 
 /// WebSocket 连接管理器

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, Instant};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout};
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 
 /// ASIC 链控制器实现
 pub struct AsicChainController {

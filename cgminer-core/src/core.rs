@@ -1,7 +1,7 @@
 //! 挖矿核心特征定义
 
 use crate::device::{DeviceInfo, DeviceConfig, MiningDevice};
-use crate::error::{CoreError, DeviceError};
+use crate::error::CoreError;
 use crate::types::{Work, MiningResult};
 use crate::CoreType;
 use async_trait::async_trait;

@@ -127,8 +127,8 @@ enabled = true
 # 指标收集间隔 (秒)
 metrics_interval = 30
 
-# Prometheus 指标端口 (可选)
-prometheus_port = 9090
+# Web监控界面端口 (可选)
+web_port = 8888
 
 # 告警阈值配置
 [monitoring.alert_thresholds]

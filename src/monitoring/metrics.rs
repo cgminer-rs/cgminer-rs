@@ -3,7 +3,7 @@ use crate::monitoring::{SystemMetrics, MiningMetrics, DeviceMetrics, PoolMetrics
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// 指标类型
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

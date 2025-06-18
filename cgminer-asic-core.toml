@@ -17,43 +17,72 @@ enabled = true
 auto_detect = true
 scan_interval = 5
 
-# 第一条链配置 (根据实际硬件调整)
+# Maijie L7 链配置 (根据实际硬件调整)
 [[devices.asic.chains]]
 id = 0
 enabled = true
-frequency = 500  # 根据 ASIC 规格调整
-voltage = 850    # 根据 ASIC 规格调整
+frequency = 650  # Maijie L7 推荐频率
+voltage = 900    # Maijie L7 推荐电压
 auto_tune = true
-chip_count = 76  # 根据实际芯片数量调整
+chip_count = 126  # Maijie L7 每条链126个芯片
 temperature_limit = 85.0
+power_limit = 3500.0  # 3.5kW功率限制
+cooling_mode = "auto"  # 自动冷却模式
 
 # 第二条链配置
 [[devices.asic.chains]]
 id = 1
 enabled = true
-frequency = 500
-voltage = 850
+frequency = 650
+voltage = 900
 auto_tune = true
-chip_count = 76
+chip_count = 126
 temperature_limit = 85.0
+power_limit = 3500.0
+cooling_mode = "auto"
 
-# 第三条链配置 (如果有)
+# 第三条链配置
 [[devices.asic.chains]]
 id = 2
-enabled = false  # 根据实际硬件启用
-frequency = 500
-voltage = 850
+enabled = true  # Maijie L7 通常有3条链
+frequency = 650
+voltage = 900
 auto_tune = true
-chip_count = 76
+chip_count = 126
 temperature_limit = 85.0
+power_limit = 3500.0
+cooling_mode = "auto"
 
 [devices.asic.auto_tuning]
 enabled = true
-target_efficiency = 0.065
+target_efficiency = 0.065  # J/GH 目标效率
 max_temperature = 85.0
-tuning_interval = 3600
-voltage_step = 25
-frequency_step = 25
+tuning_interval = 3600  # 1小时调优间隔
+voltage_step = 25  # 电压调整步长 (mV)
+frequency_step = 25  # 频率调整步长 (MHz)
+target_hashrate = 9500.0  # 目标算力 GH/s (Maijie L7 规格)
+
+# Maijie L7 特定硬件配置
+[devices.asic.maijie_l7]
+model = "L7"
+manufacturer = "Maijie"
+max_hashrate = 9500.0  # GH/s
+power_consumption = 3425.0  # W
+efficiency = 0.36  # J/GH
+operating_temperature_range = [0, 40]  # 工作温度范围 (°C)
+chip_temperature_limit = 85.0  # 芯片温度限制
+fan_count = 4  # 风扇数量
+spi_frequency = 1000000  # SPI频率 1MHz
+uart_baudrate = 115200  # UART波特率
+
+# 硬件接口配置
+[devices.asic.hardware]
+spi_devices = ["/dev/spidev0.0", "/dev/spidev0.1", "/dev/spidev1.0"]
+uart_devices = ["/dev/ttyS0", "/dev/ttyS1", "/dev/ttyS2"]
+gpio_base = "/sys/class/gpio"
+pwm_base = "/sys/class/pwm"
+reset_pins = [18, 19, 20]  # 复位GPIO引脚
+power_pins = [21, 22, 23]  # 电源控制GPIO引脚
 
 [pools]
 strategy = "failover"
@@ -61,32 +90,32 @@ failover_timeout = 30
 retry_interval = 10
 
 [pools.asic]
-# 主矿池 (替换为实际矿池地址)
+# F2Pool 主矿池
 [[pools.asic.pools]]
-url = "stratum+tcp://pool.example.com:4444"
-user = "your_username.worker1"
-password = "your_password"
+url = "stratum+tcp://btc.f2pool.com:1314"
+user = "kayuii.bbt"  # F2Pool用户名.矿工名
+password = "123"
 priority = 1
 enabled = true
-description = "主要生产矿池"
+description = "F2Pool BTC主矿池"
 
-# 备用矿池
+# F2Pool 备用矿池
 [[pools.asic.pools]]
-url = "stratum+tcp://backup.example.com:4444"
-user = "your_username.worker1"
-password = "your_password"
+url = "stratum+tcp://btc.f2pool.com:25"
+user = "kayuii.bbt"
+password = "123"
 priority = 2
 enabled = true
-description = "备用生产矿池"
+description = "F2Pool BTC备用矿池"
 
-# 第三备用矿池
+# 其他矿池备用
 [[pools.asic.pools]]
-url = "stratum+tcp://pool3.example.com:4444"
-user = "your_username.worker1"
-password = "your_password"
+url = "stratum+tcp://pool.antpool.com:3333"
+user = "kayuii.bbt"
+password = "123"
 priority = 3
-enabled = true
-description = "第三备用矿池"
+enabled = false  # 默认禁用，需要时启用
+description = "AntPool备用矿池"
 
 [api]
 enabled = true

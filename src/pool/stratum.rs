@@ -10,8 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{RwLock, Mutex};
 use tokio::time::timeout;
-use tracing::{info, warn, error, debug};
-use uuid::Uuid;
+use tracing::{info, error, debug};
 
 /// Stratum 消息
 #[derive(Debug, Clone, Serialize, Deserialize)]

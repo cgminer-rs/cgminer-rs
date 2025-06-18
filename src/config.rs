@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use crate::web::WebConfig;
 use crate::mining::HashmeterConfig;
 
 #[derive(Parser, Debug)]
@@ -36,6 +37,7 @@ pub struct Config {
     pub pools: PoolConfig,
     pub api: ApiConfig,
     pub monitoring: MonitoringConfig,
+    pub web: WebConfig,
     pub hashmeter: HashmeterConfig,
 }
 
@@ -147,7 +149,7 @@ pub struct ApiConfig {
 pub struct MonitoringConfig {
     pub enabled: bool,
     pub metrics_interval: u64,
-    pub prometheus_port: Option<u16>,
+    pub web_port: Option<u16>,
     pub alert_thresholds: AlertThresholds,
 }
 
@@ -249,7 +251,7 @@ impl Default for Config {
             monitoring: MonitoringConfig {
                 enabled: true,
                 metrics_interval: 30,
-                prometheus_port: Some(9090),
+                web_port: Some(8888),
                 alert_thresholds: AlertThresholds {
                     temperature_warning: 80.0,
                     temperature_critical: 90.0,
@@ -263,6 +265,7 @@ impl Default for Config {
                     min_hashrate: 50.0,
                 },
             },
+            web: WebConfig::default(),
             hashmeter: HashmeterConfig::default(),
         }
     }
@@ -362,7 +365,7 @@ impl Config {
         }
 
         // 验证API配置
-        if self.api.port < 1024 || self.api.port > 65535 {
+        if self.api.port < 1024 {
             anyhow::bail!("API port {} is out of range (1024-65535)", self.api.port);
         }
 

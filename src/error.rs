@@ -28,6 +28,24 @@ pub enum MiningError {
 
     #[error("API error: {0}")]
     Api(#[from] ApiError),
+
+    #[error("Security error: {0}")]
+    Security(String),
+}
+
+impl MiningError {
+    /// 创建配置错误
+    pub fn configuration(msg: String) -> Self {
+        MiningError::Config(ConfigError::ValidationError {
+            field: "configuration".to_string(),
+            reason: msg,
+        })
+    }
+
+    /// 创建安全错误
+    pub fn security(msg: String) -> Self {
+        MiningError::Security(msg)
+    }
 }
 
 #[derive(Error, Debug)]

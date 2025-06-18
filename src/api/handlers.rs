@@ -2,15 +2,13 @@ use crate::api::{
     AppState, ApiResponse, SystemStatusResponse, DeviceStatusResponse,
     PoolStatusResponse, StatsResponse, ConfigUpdateRequest, ControlRequest, ControlResponse
 };
-use crate::error::ApiError;
 use axum::{
     extract::{Path, State, Query},
     http::StatusCode,
     response::Json,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
-use tracing::{info, warn, error};
+use tracing::info;
 
 /// 获取系统状态
 pub async fn get_system_status(

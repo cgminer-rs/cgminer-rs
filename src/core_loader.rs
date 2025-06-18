@@ -1,6 +1,6 @@
 //! 核心加载器 - 动态加载和管理挖矿核心
 
-use cgminer_core::{CoreRegistry, CoreFactory, CoreType, CoreInfo, CoreError};
+use cgminer_core::{CoreRegistry, CoreType, CoreInfo, CoreError};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use tracing::{info, warn, error, debug};

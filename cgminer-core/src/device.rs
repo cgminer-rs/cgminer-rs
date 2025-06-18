@@ -1,6 +1,6 @@
 //! 设备相关类型和特征定义
 
-use crate::error::{CoreError, DeviceError};
+use crate::error::DeviceError;
 use crate::types::{Work, MiningResult, HashRate, Temperature, Voltage, Frequency};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
