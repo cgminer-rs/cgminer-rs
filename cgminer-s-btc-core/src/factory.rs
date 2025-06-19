@@ -5,7 +5,7 @@ use cgminer_core::{
     CoreFactory, CoreType, CoreInfo, CoreConfig, MiningCore, CoreError
 };
 use async_trait::async_trait;
-use tracing::info;
+use tracing::{info, error};
 
 /// 软算法核心工厂
 pub struct SoftwareCoreFactory {
@@ -49,11 +49,33 @@ impl CoreFactory for SoftwareCoreFactory {
 
     /// 创建核心实例
     async fn create_core(&self, config: CoreConfig) -> Result<Box<dyn MiningCore>, CoreError> {
-        info!("创建软算法挖矿核心实例: {}", config.name);
+        println!("🏭 [FACTORY DEBUG] 创建软算法挖矿核心实例: {}", config.name);
+        println!("📋 [FACTORY DEBUG] 配置参数: {:?}", config.custom_params);
+        error!("🏭 [DEBUG] 创建软算法挖矿核心实例: {}", config.name);
+        error!("📋 [DEBUG] 配置参数: {:?}", config.custom_params);
 
+        println!("🔧 [FACTORY DEBUG] 创建软算法核心对象...");
+        error!("🔧 [DEBUG] 创建软算法核心对象...");
         let mut core = SoftwareMiningCore::new(config.name.clone());
-        core.initialize(config).await?;
+        println!("✅ [FACTORY DEBUG] 软算法核心对象创建成功");
+        error!("✅ [DEBUG] 软算法核心对象创建成功");
 
+        println!("🚀 [FACTORY DEBUG] 开始初始化软算法核心...");
+        error!("🚀 [DEBUG] 开始初始化软算法核心...");
+        match core.initialize(config).await {
+            Ok(()) => {
+                println!("🎉 [FACTORY DEBUG] 软算法核心初始化成功");
+                error!("🎉 [DEBUG] 软算法核心初始化成功");
+            }
+            Err(e) => {
+                println!("💥 [FACTORY DEBUG] 软算法核心初始化失败: {}", e);
+                error!("💥 [DEBUG] 软算法核心初始化失败: {}", e);
+                return Err(e);
+            }
+        }
+
+        println!("📦 [FACTORY DEBUG] 返回软算法核心实例");
+        error!("📦 [DEBUG] 返回软算法核心实例");
         Ok(Box::new(core))
     }
 

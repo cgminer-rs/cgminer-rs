@@ -4,7 +4,7 @@ use crate::error::DeviceError;
 use crate::types::{Work, MiningResult, HashRate, Temperature, Voltage, Frequency};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::time::SystemTime;
+use std::time::{SystemTime, Instant};
 
 /// 设备信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,6 +116,57 @@ impl std::fmt::Display for DeviceStatus {
     }
 }
 
+/// 滑动窗口算力统计（内部使用）
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RollingHashrateStats {
+    /// 1分钟滑动窗口算力
+    pub rolling_1m: f64,
+    /// 5分钟滑动窗口算力
+    pub rolling_5m: f64,
+    /// 15分钟滑动窗口算力
+    pub rolling_15m: f64,
+    /// 最后更新时间（跳过序列化）
+    #[serde(skip, default = "Instant::now")]
+    pub last_update: Instant,
+}
+
+impl Default for RollingHashrateStats {
+    fn default() -> Self {
+        Self {
+            rolling_1m: 0.0,
+            rolling_5m: 0.0,
+            rolling_15m: 0.0,
+            last_update: Instant::now(),
+        }
+    }
+}
+
+impl RollingHashrateStats {
+    /// 更新滑动窗口算力统计
+    pub fn update(&mut self, hashes_done: u64, time_diff: f64) {
+        let hashrate = hashes_done as f64 / time_diff;
+
+        // 使用指数衰减算法更新滑动窗口算力
+        Self::decay_time(&mut self.rolling_1m, hashrate, time_diff, 60.0);
+        Self::decay_time(&mut self.rolling_5m, hashrate, time_diff, 300.0);
+        Self::decay_time(&mut self.rolling_15m, hashrate, time_diff, 900.0);
+
+        self.last_update = Instant::now();
+    }
+
+    /// 指数衰减算法（类似传统cgminer的decay_time函数）
+    fn decay_time(rolling: &mut f64, hashrate: f64, time_diff: f64, interval: f64) {
+        if time_diff <= 0.0 {
+            return;
+        }
+
+        let fprop = 1.0 - 1.0 / (time_diff / interval).exp();
+        let ftotal = 1.0 + fprop;
+        *rolling += hashrate * fprop;
+        *rolling /= ftotal;
+    }
+}
+
 /// 设备统计信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceStats {
@@ -125,6 +176,14 @@ pub struct DeviceStats {
     pub current_hashrate: HashRate,
     /// 平均算力
     pub average_hashrate: HashRate,
+    /// 1分钟平均算力
+    pub hashrate_1m: HashRate,
+    /// 5分钟平均算力
+    pub hashrate_5m: HashRate,
+    /// 15分钟平均算力
+    pub hashrate_15m: HashRate,
+    /// 总计执行的哈希次数
+    pub total_hashes: u64,
     /// 接受的工作数
     pub accepted_work: u64,
     /// 拒绝的工作数
@@ -145,6 +204,8 @@ pub struct DeviceStats {
     pub power_consumption: Option<f64>,
     /// 最后更新时间
     pub last_updated: SystemTime,
+    /// 滑动窗口算力统计（内部使用）
+    pub(crate) rolling_stats: RollingHashrateStats,
 }
 
 impl DeviceStats {
@@ -154,6 +215,10 @@ impl DeviceStats {
             device_id,
             current_hashrate: HashRate::new(0.0),
             average_hashrate: HashRate::new(0.0),
+            hashrate_1m: HashRate::new(0.0),
+            hashrate_5m: HashRate::new(0.0),
+            hashrate_15m: HashRate::new(0.0),
+            total_hashes: 0,
             accepted_work: 0,
             rejected_work: 0,
             hardware_errors: 0,
@@ -164,6 +229,7 @@ impl DeviceStats {
             fan_speed: None,
             power_consumption: None,
             last_updated: SystemTime::now(),
+            rolling_stats: RollingHashrateStats::default(),
         }
     }
 
@@ -185,6 +251,34 @@ impl DeviceStats {
         } else {
             self.hardware_errors as f64 / total_work as f64
         }
+    }
+
+    /// 更新算力统计（基于实际哈希次数）
+    pub fn update_hashrate(&mut self, hashes_done: u64, time_diff: f64) {
+        // 更新总哈希次数
+        self.total_hashes += hashes_done;
+
+        // 计算当前算力
+        if time_diff > 0.0 {
+            let current_hashrate = hashes_done as f64 / time_diff;
+            self.current_hashrate = HashRate::new(current_hashrate);
+
+            // 更新滑动窗口算力统计
+            self.rolling_stats.update(hashes_done, time_diff);
+
+            // 从滑动窗口统计中获取平均算力
+            self.hashrate_1m = HashRate::new(self.rolling_stats.rolling_1m);
+            self.hashrate_5m = HashRate::new(self.rolling_stats.rolling_5m);
+            self.hashrate_15m = HashRate::new(self.rolling_stats.rolling_15m);
+
+            // 计算总体平均算力（简单移动平均）
+            let alpha = 0.1; // 平滑因子
+            let new_avg = self.average_hashrate.hashes_per_second * (1.0 - alpha) +
+                          current_hashrate * alpha;
+            self.average_hashrate = HashRate::new(new_avg);
+        }
+
+        self.last_updated = SystemTime::now();
     }
 }
 

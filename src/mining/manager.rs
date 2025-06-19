@@ -541,7 +541,7 @@ impl MiningManager {
     /// 启动核心结果收集
     async fn start_core_result_collection(&self) -> Result<(), MiningError> {
         let running = self.running.clone();
-        let active_cores = self.active_cores.clone();
+        let core_registry = self.core_registry.clone();
         let result_sender = self.result_sender.clone();
         let stats = self.stats.clone();
 
@@ -551,88 +551,93 @@ impl MiningManager {
             while *running.read().await {
                 interval.tick().await;
 
-                // 从所有活跃核心收集结果
-                if let Ok(mut cores) = active_cores.try_lock() {
-                    for (core_id, core) in cores.iter_mut() {
-                        // 获取核心的挖矿结果
-                        match core.collect_results().await {
-                            Ok(results) => {
-                                for core_result in results {
-                                    // 转换核心结果到本地格式
-                                    let mining_result = MiningResult {
-                                        work_id: uuid::Uuid::from_u128(core_result.work_id as u128),
-                                        device_id: core_result.device_id,
-                                        nonce: core_result.nonce,
-                                        extra_nonce: if core_result.extranonce.len() >= 4 {
-                                            Some(u32::from_le_bytes([
-                                                core_result.extranonce[0],
-                                                core_result.extranonce[1],
-                                                core_result.extranonce[2],
-                                                core_result.extranonce[3],
-                                            ]))
-                                        } else {
-                                            None
-                                        },
-                                        timestamp: core_result.timestamp,
-                                        difficulty: 1.0, // 默认难度，需要从工作中获取
-                                        is_valid: core_result.meets_target,
-                                    };
+                // 从核心注册表获取所有活跃核心并收集结果
+                match core_registry.list_active_cores().await {
+                    Ok(active_core_ids) => {
+                        for core_id in active_core_ids {
+                            // 从核心注册表收集结果
+                            match core_registry.collect_results_from_core(&core_id).await {
+                                Ok(results) => {
+                                    for core_result in results {
+                                        // 转换核心结果到本地格式
+                                        let mining_result = MiningResult {
+                                            work_id: uuid::Uuid::from_u128(core_result.work_id as u128),
+                                            device_id: core_result.device_id,
+                                            nonce: core_result.nonce,
+                                            extra_nonce: if core_result.extranonce.len() >= 4 {
+                                                Some(u32::from_le_bytes([
+                                                    core_result.extranonce[0],
+                                                    core_result.extranonce[1],
+                                                    core_result.extranonce[2],
+                                                    core_result.extranonce[3],
+                                                ]))
+                                            } else {
+                                                None
+                                            },
+                                            timestamp: core_result.timestamp,
+                                            difficulty: 1.0, // 默认难度，需要从工作中获取
+                                            is_valid: core_result.meets_target,
+                                        };
 
-                                    // 创建一个临时的WorkItem（因为我们没有原始的work_item）
-                                    let temp_work = Work::new(
-                                        format!("core_work_{}", core_result.work_id),
-                                        [0u8; 32], // 临时target
-                                        [0u8; 80], // 临时header
-                                        1.0 // 临时difficulty
-                                    );
-                                    let work_item = WorkItem {
-                                        work: temp_work,
-                                        assigned_device: Some(core_result.device_id),
-                                        created_at: core_result.timestamp,
-                                        priority: 1,
-                                        retry_count: 0,
-                                    };
+                                        // 创建一个临时的WorkItem（因为我们没有原始的work_item）
+                                        let temp_work = Work::new(
+                                            format!("core_work_{}", core_result.work_id),
+                                            [0u8; 32], // 临时target
+                                            [0u8; 80], // 临时header
+                                            1.0 // 临时difficulty
+                                        );
+                                        let work_item = WorkItem {
+                                            work: temp_work,
+                                            assigned_device: Some(core_result.device_id),
+                                            created_at: core_result.timestamp,
+                                            priority: 1,
+                                            retry_count: 0,
+                                        };
 
-                                    // 创建结果项
-                                    let result_item = ResultItem::new(mining_result, work_item);
+                                        // 创建结果项
+                                        let result_item = ResultItem::new(mining_result, work_item);
 
-                                    // 发送结果到处理队列
-                                    if let Ok(sender) = result_sender.try_lock() {
-                                        if let Some(sender) = sender.as_ref() {
-                                            if let Err(e) = sender.send(result_item) {
-                                                warn!("Failed to send result from core {}: {}", core_id, e);
+                                        // 发送结果到处理队列
+                                        if let Ok(sender) = result_sender.try_lock() {
+                                            if let Some(sender) = sender.as_ref() {
+                                                if let Err(e) = sender.send(result_item) {
+                                                    warn!("Failed to send result from core {}: {}", core_id, e);
+                                                }
+                                            }
+                                        }
+
+                                        // 更新统计数据
+                                        {
+                                            let mut stats_guard = stats.write().await;
+                                            if core_result.meets_target {
+                                                stats_guard.record_accepted_share(1.0);
+                                            } else {
+                                                stats_guard.record_rejected_share();
                                             }
                                         }
                                     }
-
-                                    // 更新统计数据
-                                    {
-                                        let mut stats_guard = stats.write().await;
-                                        if core_result.meets_target {
-                                            stats_guard.record_accepted_share(1.0);
-                                        } else {
-                                            stats_guard.record_rejected_share();
-                                        }
-                                    }
+                                }
+                                Err(e) => {
+                                    debug!("No results from core {}: {}", core_id, e);
                                 }
                             }
-                            Err(e) => {
-                                debug!("No results from core {}: {}", core_id, e);
-                            }
-                        }
 
-                        // 获取核心的算力统计
-                        match core.get_stats().await {
-                            Ok(core_stats) => {
-                                // 更新总体算力统计
-                                let mut stats_guard = stats.write().await;
-                                stats_guard.current_hashrate = core_stats.total_hashrate;
-                                stats_guard.average_hashrate = core_stats.average_hashrate;
-                            }
-                            Err(e) => {
-                                debug!("Failed to get stats from core {}: {}", core_id, e);
+                            // 获取核心的算力统计
+                            match core_registry.get_core_stats(&core_id).await {
+                                Ok(core_stats) => {
+                                    // 更新总体算力统计
+                                    let mut stats_guard = stats.write().await;
+                                    stats_guard.current_hashrate = core_stats.total_hashrate;
+                                    stats_guard.average_hashrate = core_stats.average_hashrate;
+                                }
+                                Err(e) => {
+                                    debug!("Failed to get stats from core {}: {}", core_id, e);
+                                }
                             }
                         }
+                    }
+                    Err(e) => {
+                        debug!("Failed to list active cores: {}", e);
                     }
                 }
             }
@@ -681,7 +686,18 @@ impl MiningManager {
                     if self.core_registry.get_core(&core_id).await
                         .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))?.is_some() {
                         info!("✅ 软算法核心创建成功: {}", core_id);
-                        info!("软算法核心已在CoreRegistry中管理: {}", core_id);
+
+                        // 启动软算法核心
+                        match self.core_registry.start_core(&core_id).await {
+                            Ok(()) => {
+                                info!("🚀 软算法核心启动成功: {}", core_id);
+                                info!("软算法核心已在CoreRegistry中管理并运行: {}", core_id);
+                            }
+                            Err(e) => {
+                                error!("❌ 软算法核心启动失败: {}: {}", core_id, e);
+                                return Err(MiningError::CoreError(format!("启动核心失败: {}", e)));
+                            }
+                        }
                     }
                 }
                 "asic" | "maijie-l7" | "l7" => {

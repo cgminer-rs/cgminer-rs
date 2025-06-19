@@ -2,7 +2,7 @@
 
 use cgminer_core::{
     MiningDevice, DeviceInfo, DeviceConfig, DeviceStatus, DeviceStats,
-    Work, MiningResult, DeviceError, HashRate, Temperature, Voltage, Frequency
+    Work, MiningResult, DeviceError, Temperature, Voltage, Frequency
 };
 use crate::cpu_affinity::CpuAffinityManager;
 use async_trait::async_trait;
@@ -116,37 +116,58 @@ impl SoftwareDevice {
         false
     }
 
-    /// 模拟挖矿过程
+    /// 执行真实的挖矿过程（基于实际哈希次数）
     async fn mine_work(&self, work: &Work) -> Result<Option<MiningResult>, DeviceError> {
         let device_id = self.device_id();
         debug!("设备 {} 开始挖矿工作 {}", device_id, work.id);
 
-        // 计算每批次应该花费的时间（基于目标算力）
-        let batch_duration = Duration::from_secs_f64(self.batch_size as f64 / self.target_hashrate);
+        let start_time = Instant::now();
+        let mut hashes_done = 0u64;
+        let mut found_solution = None;
 
-        // 模拟挖矿延迟
-        tokio::time::sleep(batch_duration).await;
+        // 执行实际的哈希计算循环
+        for _ in 0..self.batch_size {
+            // 生成随机nonce
+            let nonce = fastrand::u32(..);
 
-        // 生成随机nonce
-        let nonce = fastrand::u32(..);
+            // 构建区块头数据
+            let mut header_data = work.header.clone();
+            if header_data.len() >= 4 {
+                // 将nonce写入区块头的最后4个字节
+                let nonce_bytes = nonce.to_le_bytes();
+                let start_idx = header_data.len() - 4;
+                header_data[start_idx..].copy_from_slice(&nonce_bytes);
+            }
 
-        // 构建区块头数据
-        let mut header_data = work.header.clone();
-        if header_data.len() >= 4 {
-            // 将nonce写入区块头的最后4个字节
-            let nonce_bytes = nonce.to_le_bytes();
-            let start_idx = header_data.len() - 4;
-            header_data[start_idx..].copy_from_slice(&nonce_bytes);
+            // 执行真实的SHA256双重哈希计算
+            let hash = self.double_sha256(&header_data);
+            hashes_done += 1;
+
+            // 检查是否满足目标难度
+            let meets_target = self.meets_target(&hash, &work.target);
+
+            // 模拟错误率
+            let has_error = fastrand::f64() < self.error_rate;
+
+            if meets_target && !has_error {
+                debug!("设备 {} 找到有效解: nonce={:08x}", device_id, nonce);
+                found_solution = Some(MiningResult::new(
+                    work.id,
+                    device_id,
+                    nonce,
+                    hash,
+                    true,
+                ));
+                break; // 找到解后退出循环
+            }
+
+            // 每执行一定数量的哈希后让出CPU时间
+            if hashes_done % 1000 == 0 {
+                tokio::task::yield_now().await;
+            }
         }
 
-        // 计算哈希
-        let hash = self.double_sha256(&header_data);
-
-        // 检查是否满足目标难度
-        let meets_target = self.meets_target(&hash, &work.target);
-
-        // 模拟错误率
-        let has_error = fastrand::f64() < self.error_rate;
+        let elapsed = start_time.elapsed().as_secs_f64();
 
         // 更新统计信息
         {
@@ -154,32 +175,13 @@ impl SoftwareDevice {
                 DeviceError::hardware_error(format!("Failed to acquire write lock: {}", e))
             })?;
 
-            stats.accepted_work += if meets_target && !has_error { 1 } else { 0 };
-            stats.rejected_work += if has_error { 1 } else { 0 };
-            stats.hardware_errors += if has_error { 1 } else { 0 };
-
-            // 更新算力统计
-            let now = Instant::now();
-            if let Some(last_time) = *self.last_mining_time.read().map_err(|e| {
-                DeviceError::hardware_error(format!("Failed to acquire read lock: {}", e))
-            })? {
-                let elapsed = now.duration_since(last_time).as_secs_f64();
-                if elapsed > 0.0 {
-                    let current_hashrate = self.batch_size as f64 / elapsed;
-                    stats.current_hashrate = HashRate::new(current_hashrate);
-
-                    // 计算平均算力（简单的移动平均）
-                    let alpha = 0.1; // 平滑因子
-                    let new_avg = stats.average_hashrate.hashes_per_second * (1.0 - alpha) +
-                                  current_hashrate * alpha;
-                    stats.average_hashrate = HashRate::new(new_avg);
-                }
-            } else {
-                stats.current_hashrate = HashRate::new(self.target_hashrate);
-                stats.average_hashrate = HashRate::new(self.target_hashrate);
+            // 更新工作统计
+            if found_solution.is_some() {
+                stats.accepted_work += 1;
             }
 
-            stats.last_updated = SystemTime::now();
+            // 基于实际哈希次数更新算力统计
+            stats.update_hashrate(hashes_done, elapsed);
         }
 
         // 更新最后挖矿时间
@@ -190,18 +192,7 @@ impl SoftwareDevice {
             *last_time = Some(Instant::now());
         }
 
-        if meets_target && !has_error {
-            debug!("设备 {} 找到有效解: nonce={:08x}", device_id, nonce);
-            Ok(Some(MiningResult::new(
-                work.id,
-                device_id,
-                nonce,
-                hash,
-                true,
-            )))
-        } else {
-            Ok(None)
-        }
+        Ok(found_solution)
     }
 
     /// 更新设备温度（基于频率和电压模拟）
@@ -347,6 +338,7 @@ impl MiningDevice for SoftwareDevice {
 
     /// 提交工作
     async fn submit_work(&mut self, work: Work) -> Result<(), DeviceError> {
+        println!("📥 [DEVICE WORK] 软算法设备 {} 接收工作 {}", self.device_id(), work.id);
         debug!("向软算法设备 {} 提交工作 {}", self.device_id(), work.id);
 
         {
@@ -354,6 +346,7 @@ impl MiningDevice for SoftwareDevice {
             *current_work = Some(work);
         }
 
+        println!("✅ [DEVICE WORK] 软算法设备 {} 工作存储成功", self.device_id());
         Ok(())
     }
 
@@ -365,12 +358,24 @@ impl MiningDevice for SoftwareDevice {
         };
 
         if let Some(work) = work {
+            println!("⛏️  [DEVICE MINING] 设备 {} 开始挖矿工作 {}", self.device_id(), work.id);
+
             // 更新温度
             self.update_temperature()?;
 
             // 执行挖矿
-            self.mine_work(&work).await
+            let result = self.mine_work(&work).await?;
+
+            if let Some(ref mining_result) = result {
+                println!("💎 [DEVICE MINING] 设备 {} 完成挖矿: nonce={:08x}, valid={}",
+                    self.device_id(), mining_result.nonce, mining_result.meets_target);
+            } else {
+                println!("⏳ [DEVICE MINING] 设备 {} 挖矿完成，无有效结果", self.device_id());
+            }
+
+            Ok(result)
         } else {
+            // 没有工作 - 这是正常的
             Ok(None)
         }
     }

@@ -236,10 +236,17 @@ impl MiningCore for SoftwareMiningCore {
 
     /// 初始化核心
     async fn initialize(&mut self, config: CoreConfig) -> Result<(), CoreError> {
-        info!("初始化软算法挖矿核心: {}", config.name);
+        println!("🔧 [CORE DEBUG] 开始初始化软算法挖矿核心: {}", config.name);
+        println!("📋 [CORE DEBUG] 配置参数: {:?}", config.custom_params);
+        error!("🔧 [DEBUG] 开始初始化软算法挖矿核心: {}", config.name);
+        error!("📋 [DEBUG] 配置参数: {:?}", config.custom_params);
 
         // 验证配置
+        println!("✅ [CORE DEBUG] 验证配置...");
+        error!("✅ [DEBUG] 验证配置...");
         self.validate_config(&config)?;
+        println!("✅ [CORE DEBUG] 配置验证通过");
+        error!("✅ [DEBUG] 配置验证通过");
 
         // 初始化性能优化器
         let mut perf_config = crate::performance::PerformanceConfig::default();
@@ -265,7 +272,11 @@ impl MiningCore for SoftwareMiningCore {
         }
 
         // 创建设备
+        println!("🏭 [CORE DEBUG] 开始创建软算法设备...");
+        error!("🏭 [DEBUG] 开始创建软算法设备...");
         let devices = self.create_software_devices(&config).await?;
+        println!("✅ [CORE DEBUG] 软算法设备创建完成，共创建 {} 个设备", devices.len());
+        error!("✅ [DEBUG] 软算法设备创建完成，共创建 {} 个设备", devices.len());
 
         // 存储设备
         {
@@ -294,7 +305,17 @@ impl MiningCore for SoftwareMiningCore {
         }
 
         self.config = Some(config);
-        info!("软算法挖矿核心初始化完成");
+
+        // 检查设备数量
+        let device_count = {
+            let devices = self.devices.lock().await;
+            devices.len()
+        };
+        println!("📊 [CORE DEBUG] 最终设备数量: {}", device_count);
+        error!("📊 [DEBUG] 最终设备数量: {}", device_count);
+
+        println!("🎉 [CORE DEBUG] 软算法挖矿核心初始化完成");
+        error!("🎉 [DEBUG] 软算法挖矿核心初始化完成");
         Ok(())
     }
 
@@ -429,15 +450,25 @@ impl MiningCore for SoftwareMiningCore {
 
     /// 提交工作到所有设备
     async fn submit_work(&mut self, work: Work) -> Result<(), CoreError> {
+        println!("🚀 [CORE WORK] 软算法核心接收到工作: {}", work.id);
         debug!("提交工作到所有软算法设备: {}", work.id);
 
         let mut devices = self.devices.lock().await;
+        println!("📊 [CORE WORK] 向 {} 个软算法设备分发工作", devices.len());
+
         for (device_id, device) in devices.iter_mut() {
-            if let Err(e) = device.submit_work(work.clone()).await {
-                warn!("向设备 {} 提交工作失败: {}", device_id, e);
+            match device.submit_work(work.clone()).await {
+                Ok(()) => {
+                    println!("✅ [CORE WORK] 工作成功提交到设备 {}", device_id);
+                }
+                Err(e) => {
+                    println!("❌ [CORE WORK] 向设备 {} 提交工作失败: {}", device_id, e);
+                    warn!("向设备 {} 提交工作失败: {}", device_id, e);
+                }
             }
         }
 
+        println!("🎯 [CORE WORK] 工作分发完成");
         Ok(())
     }
 
@@ -446,14 +477,25 @@ impl MiningCore for SoftwareMiningCore {
         let mut results = Vec::new();
         let mut devices = self.devices.lock().await;
 
-        for device in devices.values_mut() {
+        println!("🔍 [CORE RESULTS] 开始收集 {} 个设备的挖矿结果", devices.len());
+
+        for (device_id, device) in devices.iter_mut() {
             match device.get_result().await {
-                Ok(Some(result)) => results.push(result),
-                Ok(None) => {}, // 没有结果
-                Err(e) => warn!("获取设备挖矿结果失败: {}", e),
+                Ok(Some(result)) => {
+                    println!("💎 [CORE RESULTS] 设备 {} 产生挖矿结果: nonce={:08x}", device_id, result.nonce);
+                    results.push(result);
+                }
+                Ok(None) => {
+                    // 没有结果 - 这是正常的
+                },
+                Err(e) => {
+                    println!("❌ [CORE RESULTS] 获取设备 {} 挖矿结果失败: {}", device_id, e);
+                    warn!("获取设备挖矿结果失败: {}", e);
+                }
             }
         }
 
+        println!("📊 [CORE RESULTS] 收集完成，共收集到 {} 个挖矿结果", results.len());
         debug!("收集到 {} 个挖矿结果", results.len());
         Ok(results)
     }

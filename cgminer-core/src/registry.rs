@@ -1,8 +1,8 @@
 //! 核心注册和发现系统
 
-use crate::core::{MiningCore, CoreInfo, CoreConfig};
+use crate::core::{MiningCore, CoreInfo, CoreConfig, CoreStats};
 use crate::error::CoreError;
-use crate::types::Work;
+use crate::types::{Work, MiningResult};
 use crate::CoreType;
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -121,8 +121,17 @@ impl CoreRegistry {
             let factories = self.factories.read().await;
 
             if let Some(factory) = factories.get(factory_name) {
-                factory.create_core(config.clone()).await?
+                println!("🏭 [REGISTRY DEBUG] 核心注册表找到工厂: {}", factory_name);
+                println!("🚀 [REGISTRY DEBUG] 核心注册表调用工厂的create_core方法...");
+                error!("🏭 [DEBUG] 核心注册表找到工厂: {}", factory_name);
+                error!("🚀 [DEBUG] 核心注册表调用工厂的create_core方法...");
+                let result = factory.create_core(config.clone()).await?;
+                println!("✅ [REGISTRY DEBUG] 核心注册表工厂create_core方法调用成功");
+                error!("✅ [DEBUG] 核心注册表工厂create_core方法调用成功");
+                result
             } else {
+                println!("❌ [REGISTRY DEBUG] 核心注册表未找到工厂: {}", factory_name);
+                error!("❌ [DEBUG] 核心注册表未找到工厂: {}", factory_name);
                 return Err(CoreError::runtime(format!("核心工厂 '{}' 不存在", factory_name)));
             }
         };
@@ -178,6 +187,32 @@ impl CoreRegistry {
         Ok(())
     }
 
+    /// 启动指定核心
+    pub async fn start_core(&self, core_id: &str) -> Result<(), CoreError> {
+        let mut active_cores = self.active_cores.write().await;
+
+        if let Some(core) = active_cores.get_mut(core_id) {
+            core.start().await.map_err(|e| {
+                CoreError::runtime(format!("Failed to start core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
+    /// 停止指定核心
+    pub async fn stop_core(&self, core_id: &str) -> Result<(), CoreError> {
+        let mut active_cores = self.active_cores.write().await;
+
+        if let Some(core) = active_cores.get_mut(core_id) {
+            core.stop().await.map_err(|e| {
+                CoreError::runtime(format!("Failed to stop core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
     /// 向指定核心提交工作
     pub async fn submit_work_to_core(&self, core_id: &str, work: Work) -> Result<(), CoreError> {
         let mut active_cores = self.active_cores.write().await;
@@ -185,6 +220,32 @@ impl CoreRegistry {
         if let Some(core) = active_cores.get_mut(core_id) {
             core.submit_work(work).await.map_err(|e| {
                 CoreError::runtime(format!("Failed to submit work to core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
+    /// 从指定核心收集挖矿结果
+    pub async fn collect_results_from_core(&self, core_id: &str) -> Result<Vec<MiningResult>, CoreError> {
+        let mut active_cores = self.active_cores.write().await;
+
+        if let Some(core) = active_cores.get_mut(core_id) {
+            core.collect_results().await.map_err(|e| {
+                CoreError::runtime(format!("Failed to collect results from core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
+    /// 获取指定核心的统计信息
+    pub async fn get_core_stats(&self, core_id: &str) -> Result<CoreStats, CoreError> {
+        let active_cores = self.active_cores.read().await;
+
+        if let Some(core) = active_cores.get(core_id) {
+            core.get_stats().await.map_err(|e| {
+                CoreError::runtime(format!("Failed to get stats from core '{}': {}", core_id, e))
             })
         } else {
             Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
