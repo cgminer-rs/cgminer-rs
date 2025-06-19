@@ -27,7 +27,7 @@ fn create_test_work(id: u64) -> Work {
         .as_secs();
 
     // 创建一个简单的区块头（80字节）
-    let mut header = vec![0u8; 80];
+    let mut header = [0u8; 80];
 
     // 版本号 (4字节)
     header[0..4].copy_from_slice(&1u32.to_le_bytes());
@@ -52,19 +52,17 @@ fn create_test_work(id: u64) -> Work {
     header[76..80].copy_from_slice(&0u32.to_le_bytes());
 
     // 创建目标值 - 设置较低的难度
-    let mut target = vec![0xffu8; 32];
+    let mut target = [0xffu8; 32];
     target[0] = 0x00;
     target[1] = 0x00;
     target[2] = 0x7f;
 
-    Work {
-        id,
-        header,
+    Work::new(
+        format!("test_job_{}", id),
         target,
-        timestamp: SystemTime::now(),
-        difficulty: 1.0,
-        extranonce: vec![0u8; 4],
-    }
+        header,
+        1.0,
+    )
 }
 
 #[tokio::test]

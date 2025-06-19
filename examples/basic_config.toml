@@ -28,19 +28,30 @@ enabled_cores = ["software"]
 # 默认使用的核心类型
 default_core = "software"
 
-# 软算法核心配置 (用于CPU挖矿和开发测试)
-[cores.software_core]
+# Bitcoin软算法核心配置 (用于CPU挖矿和开发测试)
+[cores.btc_software]
 enabled = true               # 启用软算法核心
 device_count = 1            # 基础配置使用单个设备
-cpu_threads = 0             # 0 = 自动检测CPU核心数
-cpu_affinity = true         # 启用CPU亲和性绑定
-algorithm = "sha256d"       # 使用SHA256d算法
-target_hashrate = 50.0      # 目标算力 (MH/s)
+min_hashrate = 30_000_000.0  # 最小算力 (H/s) - 30 MH/s
+max_hashrate = 80_000_000.0  # 最大算力 (H/s) - 80 MH/s
+error_rate = 0.01           # 错误率 (1%)
 batch_size = 100000         # 批处理大小
+work_timeout_ms = 5000      # 工作超时时间 (毫秒)
 
-# ASIC核心配置 (基础配置中禁用)
-[cores.asic_core]
+# CPU亲和性配置
+[cores.btc_software.cpu_affinity]
+enabled = true              # 启用CPU亲和性绑定
+strategy = "round_robin"    # 轮询策略
+
+# Maijie L7 ASIC核心配置 (基础配置中禁用)
+[cores.maijie_l7]
 enabled = false             # 基础配置禁用ASIC核心
+chain_count = 3
+spi_speed = 6000000
+uart_baud = 115200
+auto_detect = true
+power_limit = 3000.0
+cooling_mode = "auto"
 
 # =============================================================================
 # 设备配置 (软算法核心设备配置)
@@ -51,30 +62,14 @@ auto_detect = true
 # 设备扫描间隔 (秒)
 scan_interval = 10
 
-# 软算法设备配置
-[devices.software]
-enabled = true
-device_count = 1            # 基础配置使用单个设备
-
-[devices.software.config]
-frequency = 600             # 软算法频率设置
-voltage = 900              # 软算法电压设置
+# 设备链配置 (基础配置使用单个链)
+[[devices.chains]]
+id = 0                     # 链ID
+enabled = true             # 启用此链
+frequency = 600            # 频率设置 (MHz)
+voltage = 900              # 电压设置 (mV)
 auto_tune = true           # 启用自动调优
-chip_count = 64            # 虚拟芯片数量
-temperature_limit = 80.0   # 温度限制
-fan_speed = 50             # 风扇速度
-
-[devices.software.mining]
-min_hashrate = 30.0        # 最小算力 (MH/s)
-max_hashrate = 80.0        # 最大算力 (MH/s)
-error_rate = 0.1           # 错误率 (%)
-min_temperature = 40.0     # 最小温度
-max_temperature = 70.0     # 最大温度
-batch_size = 100000        # 批处理大小
-
-# ASIC设备配置 (基础配置中禁用)
-[devices.asic]
-enabled = false
+chip_count = 64            # 芯片数量
 
 # =============================================================================
 # 矿池配置
@@ -130,8 +125,8 @@ enabled = true
 # 指标收集间隔 (秒)
 metrics_interval = 30
 
-# Prometheus 指标端口 (可选)
-prometheus_port = 9090
+# 内置Web监控端口
+web_port = 8888
 
 # 告警阈值配置
 [monitoring.alert_thresholds]

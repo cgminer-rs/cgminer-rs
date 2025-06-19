@@ -2,11 +2,10 @@
 //!
 //! 处理cgminer-core和主程序之间的数据结构转换
 
-use crate::device::{DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult};
+use crate::device::{DeviceInfo, DeviceStatus, DeviceStats};
 use crate::error::DeviceError;
 use cgminer_core::{HashRate, Temperature};
-use std::time::{Duration, SystemTime};
-use uuid::Uuid;
+use std::time::Duration;
 
 /// 将cgminer-core的DeviceInfo转换为主程序的DeviceInfo
 pub fn convert_core_to_device_info(core_info: cgminer_core::DeviceInfo) -> DeviceInfo {
@@ -80,97 +79,7 @@ pub fn convert_device_to_core_status(device_status: DeviceStatus) -> cgminer_cor
     }
 }
 
-/// 将主程序的Work转换为cgminer-core的Work
-pub fn convert_device_to_core_work(device_work: Work) -> cgminer_core::Work {
-    // 简化的UUID到u64转换，使用时间戳的低64位
-    let work_id = device_work.created_at
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap_or(Duration::from_secs(0))
-        .as_nanos() as u64;
-
-    cgminer_core::Work {
-        id: work_id,
-        header: device_work.header.to_vec(), // [u8; 80] -> Vec<u8>
-        target: device_work.target.to_vec(), // [u8; 32] -> Vec<u8>
-        timestamp: device_work.created_at,
-        extranonce: Vec::new(), // 默认空
-        difficulty: device_work.difficulty,
-    }
-}
-
-/// 将cgminer-core的Work转换为主程序的Work
-pub fn convert_core_to_device_work(core_work: cgminer_core::Work) -> Work {
-    // 将Vec<u8>转换为固定大小数组，不足的部分用0填充
-    let mut header = [0u8; 80];
-    let header_len = core_work.header.len().min(80);
-    header[..header_len].copy_from_slice(&core_work.header[..header_len]);
-
-    let mut target = [0u8; 32];
-    let target_len = core_work.target.len().min(32);
-    target[..target_len].copy_from_slice(&core_work.target[..target_len]);
-
-    Work {
-        id: Uuid::new_v4(), // 生成新的UUID
-        job_id: format!("job_{}", core_work.id), // 从work_id生成job_id
-        target,
-        header,
-        midstate: [[0u8; 32]; 8], // 默认空midstate
-        difficulty: core_work.difficulty,
-        created_at: core_work.timestamp,
-        expires_at: core_work.timestamp + Duration::from_secs(120), // 2分钟过期
-    }
-}
-
-/// 将cgminer-core的MiningResult转换为主程序的MiningResult
-pub fn convert_core_to_device_result(core_result: cgminer_core::MiningResult) -> MiningResult {
-    // 简化的u64到UUID转换
-    let work_id = Uuid::from_u128(core_result.work_id as u128);
-
-    // 将extranonce Vec<u8>转换为Option<u32>
-    let extra_nonce = if core_result.extranonce.len() >= 4 {
-        Some(u32::from_le_bytes([
-            core_result.extranonce[0],
-            core_result.extranonce[1],
-            core_result.extranonce[2],
-            core_result.extranonce[3],
-        ]))
-    } else {
-        None
-    };
-
-    MiningResult {
-        work_id,
-        device_id: core_result.device_id,
-        nonce: core_result.nonce,
-        extra_nonce,
-        timestamp: core_result.timestamp,
-        difficulty: 1.0, // 默认难度，需要从其他地方获取
-        is_valid: core_result.meets_target,
-    }
-}
-
-/// 将主程序的MiningResult转换为cgminer-core的MiningResult
-pub fn convert_device_to_core_result(device_result: MiningResult) -> cgminer_core::MiningResult {
-    // UUID到u64的简化转换
-    let work_id = device_result.work_id.as_u128() as u64;
-
-    // Option<u32>到Vec<u8>的转换
-    let extranonce = if let Some(extra_nonce) = device_result.extra_nonce {
-        extra_nonce.to_le_bytes().to_vec()
-    } else {
-        Vec::new()
-    };
-
-    cgminer_core::MiningResult {
-        work_id,
-        device_id: device_result.device_id,
-        nonce: device_result.nonce,
-        extranonce,
-        timestamp: device_result.timestamp,
-        hash: Vec::new(), // 默认空hash
-        meets_target: device_result.is_valid,
-    }
-}
+// Work和MiningResult现在已经统一，不再需要转换函数
 
 /// 将cgminer-core的DeviceStats转换为主程序的DeviceStats
 pub fn convert_core_to_device_stats(core_stats: cgminer_core::DeviceStats) -> DeviceStats {

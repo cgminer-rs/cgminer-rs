@@ -3,7 +3,8 @@ pub mod work_queue;
 pub mod hashmeter;
 
 use crate::config::Config;
-use crate::device::{Work, MiningResult};
+use crate::device::Work;
+use cgminer_core::types::MiningResult;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
@@ -237,6 +238,90 @@ impl WorkItem {
         SystemTime::now()
             .duration_since(self.created_at)
             .unwrap_or(Duration::from_secs(0))
+    }
+
+    /// 验证工作数据完整性
+    pub fn validate_work_integrity(&self) -> Result<(), String> {
+        // 验证基本字段
+        if self.work.job_id.is_empty() {
+            return Err("Job ID is empty".to_string());
+        }
+
+        // 验证区块头不全为零
+        if self.work.header.iter().all(|&b| b == 0) {
+            return Err("Block header is all zeros".to_string());
+        }
+
+        // 验证目标值不全为零
+        if self.work.target.iter().all(|&b| b == 0) {
+            return Err("Target is all zeros".to_string());
+        }
+
+        // 验证难度值
+        if self.work.difficulty <= 0.0 || !self.work.difficulty.is_finite() {
+            return Err(format!("Invalid difficulty: {}", self.work.difficulty));
+        }
+
+        // 验证extranonce字段
+        if self.work.extranonce1.is_empty() {
+            return Err("Extranonce1 is empty".to_string());
+        }
+
+        if self.work.extranonce2.len() != self.work.extranonce2_size {
+            return Err(format!(
+                "Extranonce2 size mismatch: expected {}, got {}",
+                self.work.extranonce2_size,
+                self.work.extranonce2.len()
+            ));
+        }
+
+        // 验证coinbase数据
+        if self.work.coinbase1.is_empty() {
+            return Err("Coinbase1 is empty".to_string());
+        }
+
+        if self.work.coinbase2.is_empty() {
+            return Err("Coinbase2 is empty".to_string());
+        }
+
+        // 验证时间戳
+        if self.work.ntime == 0 {
+            return Err("nTime is zero".to_string());
+        }
+
+        // 验证版本
+        if self.work.version == 0 {
+            return Err("Version is zero".to_string());
+        }
+
+        // 验证nBits
+        if self.work.nbits == 0 {
+            return Err("nBits is zero".to_string());
+        }
+
+        Ok(())
+    }
+
+    /// 验证工作是否适合指定设备
+    pub fn is_suitable_for_device(&self, device_id: u32) -> bool {
+        // 如果已分配给特定设备，检查是否匹配
+        if let Some(assigned_device) = self.assigned_device {
+            return assigned_device == device_id;
+        }
+
+        // 如果未分配，检查工作是否仍然有效
+        !self.is_expired() && self.validate_work_integrity().is_ok()
+    }
+
+    /// 创建工作的深拷贝（确保数据完整性）
+    pub fn deep_clone(&self) -> Self {
+        Self {
+            work: self.work.clone(),
+            assigned_device: self.assigned_device,
+            created_at: self.created_at,
+            priority: self.priority,
+            retry_count: self.retry_count,
+        }
     }
 }
 

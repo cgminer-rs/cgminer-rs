@@ -7,15 +7,16 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};
 use tokio::sync::Notify;
 use tracing::{debug, warn};
+use uuid::Uuid;
 
 /// 工作队列
 pub struct WorkQueue {
     /// 待处理的工作
     pending_work: Arc<RwLock<VecDeque<Work>>>,
     /// 正在处理的工作
-    active_work: Arc<RwLock<HashMap<u64, Work>>>,
+    active_work: Arc<RwLock<HashMap<Uuid, Work>>>,
     /// 已完成的工作
-    completed_work: Arc<RwLock<HashMap<u64, MiningResult>>>,
+    completed_work: Arc<RwLock<HashMap<Uuid, MiningResult>>>,
     /// 最大队列大小
     max_queue_size: usize,
     /// 工作过期时间
@@ -96,7 +97,7 @@ impl WorkQueue {
     }
 
     /// 标记工作完成
-    pub fn complete_work(&self, work_id: u64, result: MiningResult) -> Result<(), CoreError> {
+    pub fn complete_work(&self, work_id: Uuid, result: MiningResult) -> Result<(), CoreError> {
         // 从活跃列表中移除
         let mut active = self.active_work.write().map_err(|e| {
             CoreError::runtime(format!("Failed to acquire write lock: {}", e))
@@ -145,7 +146,7 @@ impl WorkQueue {
 
         // 从前面开始移除过期的工作
         while let Some(work) = pending.front() {
-            if work.is_expired(self.work_expiry) {
+            if work.is_expired_with_max_age(self.work_expiry) {
                 pending.pop_front();
                 expired_count += 1;
             } else {
@@ -201,8 +202,9 @@ impl WorkManager {
     }
 
     /// 创建新工作
-    pub fn create_work(&self, header: Vec<u8>, target: Vec<u8>, difficulty: f64) -> Result<Work, CoreError> {
-        let work_id = {
+    pub fn create_work(&self, job_id: String, header: [u8; 80], target: [u8; 32], difficulty: f64) -> Result<Work, CoreError> {
+        // 更新计数器（用于统计）
+        let _work_id = {
             let mut counter = self.work_id_counter.write().map_err(|e| {
                 CoreError::runtime(format!("Failed to acquire write lock: {}", e))
             })?;
@@ -210,7 +212,7 @@ impl WorkManager {
             *counter
         };
 
-        Ok(Work::new(work_id, header, target, difficulty))
+        Ok(Work::new(job_id, target, header, difficulty))
     }
 
     /// 提交工作
@@ -229,7 +231,7 @@ impl WorkManager {
     }
 
     /// 完成工作
-    pub fn complete_work(&self, work_id: u64, result: MiningResult) -> Result<(), CoreError> {
+    pub fn complete_work(&self, work_id: Uuid, result: MiningResult) -> Result<(), CoreError> {
         self.work_queue.complete_work(work_id, result)
     }
 

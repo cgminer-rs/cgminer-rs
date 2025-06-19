@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error};
+use tracing::{info, warn, error, debug};
 
 /// 核心工厂特征
 #[async_trait]
@@ -121,17 +121,13 @@ impl CoreRegistry {
             let factories = self.factories.read().await;
 
             if let Some(factory) = factories.get(factory_name) {
-                println!("🏭 [REGISTRY DEBUG] 核心注册表找到工厂: {}", factory_name);
-                println!("🚀 [REGISTRY DEBUG] 核心注册表调用工厂的create_core方法...");
-                error!("🏭 [DEBUG] 核心注册表找到工厂: {}", factory_name);
-                error!("🚀 [DEBUG] 核心注册表调用工厂的create_core方法...");
+                debug!("🏭 核心注册表找到工厂: {}", factory_name);
+                debug!("🚀 核心注册表调用工厂的create_core方法...");
                 let result = factory.create_core(config.clone()).await?;
-                println!("✅ [REGISTRY DEBUG] 核心注册表工厂create_core方法调用成功");
-                error!("✅ [DEBUG] 核心注册表工厂create_core方法调用成功");
+                debug!("✅ 核心注册表工厂create_core方法调用成功");
                 result
             } else {
-                println!("❌ [REGISTRY DEBUG] 核心注册表未找到工厂: {}", factory_name);
-                error!("❌ [DEBUG] 核心注册表未找到工厂: {}", factory_name);
+                error!("❌ 核心注册表未找到工厂: {}", factory_name);
                 return Err(CoreError::runtime(format!("核心工厂 '{}' 不存在", factory_name)));
             }
         };

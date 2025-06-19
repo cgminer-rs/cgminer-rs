@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use tracing::{info, warn, error, debug};
+use tracing::{info, warn, debug};
 use core_affinity::{CoreId, get_core_ids, set_for_current};
 
 /// CPU绑定管理器
@@ -43,6 +43,16 @@ impl CpuAffinityManager {
         info!("系统检测到 {} 个CPU核心", available_cores.len());
 
         let is_enabled = enabled && !available_cores.is_empty();
+
+        if enabled && available_cores.is_empty() {
+            warn!("CPU绑定已启用但无法获取CPU核心信息，CPU绑定功能将被禁用");
+        } else if !enabled {
+            info!("CPU绑定功能已禁用");
+        } else {
+            info!("CPU绑定功能已启用，将使用 {:?} 策略", strategy);
+            #[cfg(target_os = "macos")]
+            info!("注意：在macOS环境下，CPU绑定可能需要特殊权限或可能不被完全支持");
+        }
 
         Self {
             available_cores,
@@ -177,7 +187,7 @@ impl CpuAffinityManager {
                 }
                 false => {
                     let error_msg = format!("无法将线程绑定到CPU核心 {:?} (设备 {})", core_id, device_id);
-                    error!("{}", error_msg);
+                    warn!("{}", error_msg);
                     Err(error_msg)
                 }
             }

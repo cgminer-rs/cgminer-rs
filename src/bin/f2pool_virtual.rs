@@ -1,9 +1,8 @@
 use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime};
-use std::io::{self, Write};
+use std::time::{Duration, Instant};
 use sha2::{Sha256, Digest};
-use chrono::{DateTime, Local};
+use chrono::Local;
 
 /// 格式化日志时间戳
 fn log_timestamp() -> String {
@@ -122,7 +121,7 @@ impl StratumConnection {
 
         if accepted {
             self.shares_accepted.fetch_add(1, Ordering::Relaxed);
-            let (submitted, accepted_count, rejected) = self.get_stats();
+            let (submitted, accepted_count, _rejected) = self.get_stats();
             let accept_rate = if submitted > 0 { (accepted_count as f64 / submitted as f64) * 100.0 } else { 0.0 };
             log_share(&format!("ACCEPTED {}/{} ({:.1}%) - Device {}, nonce: 0x{:08x}",
                               accepted_count, submitted, accept_rate, device_id, nonce));
@@ -228,7 +227,7 @@ impl VirtualMiningDevice {
     fn mine_loop(&self, stratum: Arc<StratumConnection>) {
         let mut last_share = Instant::now();
         let mut total_hashes = 0u64;
-        let start_time = Instant::now();
+        let _start_time = Instant::now();
         let mut nonce = fastrand::u32(..);
 
         // 根据真实算力计算每轮应该执行的哈希数

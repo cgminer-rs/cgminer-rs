@@ -12,10 +12,13 @@ pub enum MiningError {
     Pool(#[from] PoolError),
 
     #[error("Work error: {0}")]
-    Work(#[from] WorkError),
+    WorkError(String),
 
     #[error("Configuration error: {0}")]
     Config(#[from] ConfigError),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(String),
 
     #[error("Hardware error: {0}")]
     Hardware(String),
@@ -45,6 +48,11 @@ impl MiningError {
     /// 创建安全错误
     pub fn security(msg: String) -> Self {
         MiningError::Security(msg)
+    }
+
+    /// 创建验证错误
+    pub fn validation_error(msg: impl Into<String>) -> Self {
+        MiningError::configuration(format!("Validation error: {}", msg.into()))
     }
 }
 
@@ -79,6 +87,9 @@ pub enum DeviceError {
 
     #[error("Unsupported device type: {device_type}")]
     UnsupportedDevice { device_type: String },
+
+    #[error("Invalid device state: {device_id}, state: {state}")]
+    InvalidState { device_id: u32, state: String },
 }
 
 #[derive(Error, Debug, Clone)]
@@ -271,7 +282,7 @@ impl ErrorStats {
         match error {
             MiningError::Device(_) => self.device_errors += 1,
             MiningError::Pool(_) => self.pool_errors += 1,
-            MiningError::Work(_) => self.work_errors += 1,
+            MiningError::WorkError(_) => self.work_errors += 1,
             MiningError::Network(_) => self.network_errors += 1,
             _ => {}
         }

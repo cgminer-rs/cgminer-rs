@@ -62,8 +62,7 @@ ctrlc = "3.4"
 libc = "0.2"
 nix = "0.27"
 
-# Metrics and monitoring
-prometheus = { version = "0.13", optional = true }
+# Metrics and monitoring (Prometheus removed - using simple built-in monitoring)
 
 # Web server for API
 axum = { version = "0.7", features = ["ws", "macros"] }
@@ -71,10 +70,8 @@ tower = { version = "0.4", features = ["full"] }
 tower-http = { version = "0.5", features = ["cors", "trace", "timeout"] }
 futures-util = "0.3"
 
-# Security and authentication
-jsonwebtoken = "9.2"
+# Security (simplified - only essential encryption)
 aes-gcm = "0.10"
-argon2 = "0.5"
 rand = "0.8"
 base64 = "0.21"
 
@@ -136,7 +133,6 @@ software-only = ["btc-software"]
 
 # 其他特性
 web-ui = []
-metrics = ["prometheus"]
 dynamic-loading = ["libloading"]
 
 [[bench]]

@@ -194,6 +194,100 @@ impl MiningLogger {
         }
     }
 
+    /// 记录新工作接收（mining.notify）
+    pub fn log_work_received(&self, pool_id: u32, job_id: &str, previous_hash: &str, clean_jobs: bool, difficulty: f64) {
+        let clean_status = if clean_jobs { "🔄 清理旧工作" } else { "📝 新工作" };
+        info!("🌊 矿池 {} 检测到新区块 | {} | 作业ID: {} | 前块哈希: {}... | 难度: {:.2}",
+              pool_id,
+              clean_status,
+              job_id,
+              &previous_hash[..16], // 只显示前16个字符
+              difficulty);
+
+        if self.verbose {
+            info!("   📋 完整前块哈希: {}", previous_hash);
+            info!("   🎯 当前挖矿难度: {}", formatter::format_difficulty(difficulty));
+        }
+    }
+
+    /// 记录工作分发
+    pub fn log_work_distributed(&self, work_id: &str, device_count: usize, extranonce2_size: usize) {
+        if self.verbose {
+            info!("📤 工作分发 | 工作ID: {} | 分发到 {} 个设备 | ExtraNonce2大小: {} 字节",
+                  work_id, device_count, extranonce2_size);
+        }
+    }
+
+    /// 记录份额提交详情（mining.submit）
+    pub fn log_share_submit_details(&self, pool_id: u32, device_id: u32, job_id: &str, nonce: u32, ntime: u32, extranonce2: &str, difficulty: f64) {
+        if self.verbose {
+            info!("📤 设备 {} -> 矿池 {} | 提交份额详情:",
+                  device_id, pool_id);
+            info!("   🆔 作业ID: {}", job_id);
+            info!("   🎲 随机数: 0x{:08x}", nonce);
+            info!("   ⏰ 时间戳: 0x{:08x}", ntime);
+            info!("   🔢 ExtraNonce2: {}", extranonce2);
+            info!("   🎯 份额难度: {}", formatter::format_difficulty(difficulty));
+        } else {
+            info!("📤 设备 {} -> 矿池 {} | 作业: {} | 随机数: 0x{:08x} | 难度: {:.2}",
+                  device_id, pool_id, job_id, nonce, difficulty);
+        }
+    }
+
+    /// 记录份额提交结果
+    pub fn log_share_result(&self, pool_id: u32, device_id: u32, accepted: bool, difficulty: f64, reason: Option<&str>) {
+        let (result_icon, result_text) = if accepted {
+            ("✅", "接受")
+        } else {
+            ("❌", "拒绝")
+        };
+
+        if accepted {
+            info!("📥 矿池 {} 响应 | 设备 {} | {} {} | 难度: {:.2}",
+                  pool_id, device_id, result_icon, result_text, difficulty);
+        } else {
+            let reason_text = reason.unwrap_or("未知原因");
+            warn!("📥 矿池 {} 响应 | 设备 {} | {} {} | 难度: {:.2} | 原因: {}",
+                  pool_id, device_id, result_icon, result_text, difficulty, reason_text);
+        }
+    }
+
+    /// 记录难度调整
+    pub fn log_difficulty_change(&self, pool_id: u32, old_difficulty: f64, new_difficulty: f64) {
+        let change_icon = if new_difficulty > old_difficulty { "📈" } else { "📉" };
+        info!("🎯 矿池 {} 难度调整 | {} {} -> {} | 变化: {:.1}%",
+              pool_id,
+              change_icon,
+              formatter::format_difficulty(old_difficulty),
+              formatter::format_difficulty(new_difficulty),
+              ((new_difficulty - old_difficulty) / old_difficulty * 100.0));
+    }
+
+    /// 记录Stratum协议消息
+    pub fn log_stratum_message(&self, direction: &str, method: &str, message: &str) {
+        if self.verbose {
+            debug!("🔗 Stratum {} | 方法: {} | 消息: {}", direction, method, message);
+        }
+    }
+
+    /// 记录矿池连接状态变化
+    pub fn log_pool_connection_change(&self, pool_id: u32, url: &str, connected: bool, reason: Option<&str>) {
+        let status_icon = if connected {
+            "🟢"
+        } else {
+            "🔴"
+        };
+
+        if connected {
+            info!("🌊 矿池 {} {} | {} | 连接成功",
+                  pool_id, status_icon, url);
+        } else {
+            let reason_text = reason.unwrap_or("未知原因");
+            warn!("🌊 矿池 {} {} | {} | 断开原因: {}",
+                  pool_id, status_icon, url, reason_text);
+        }
+    }
+
     /// 记录算力趋势
     pub fn log_hashrate_trend(&self) {
         // 这里可以添加算力趋势图的显示

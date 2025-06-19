@@ -532,22 +532,31 @@ impl MiningCore for SoftwareMiningCore {
 
     /// 提交工作到所有设备
     async fn submit_work(&mut self, work: Work) -> Result<(), CoreError> {
-        debug!("提交工作到所有软算法设备: {}", work.id);
-
         let mut devices = self.devices.lock().await;
+        let device_count = devices.len();
+        let mut success_count = 0;
+        let mut failed_devices = Vec::new();
 
         for (device_id, device) in devices.iter_mut() {
             match device.submit_work(work.clone()).await {
                 Ok(()) => {
-                    debug!("工作成功提交到设备 {}", device_id);
+                    success_count += 1;
                 }
                 Err(e) => {
                     warn!("向设备 {} 提交工作失败: {}", device_id, e);
+                    failed_devices.push(*device_id);
                 }
             }
         }
 
-        debug!("工作分发完成");
+        // 只在有失败或者成功率不是100%时才记录详细信息
+        if failed_devices.is_empty() {
+            debug!("工作 {} 成功分发到所有 {} 个设备", work.id, device_count);
+        } else {
+            warn!("工作 {} 分发完成: 成功 {}/{} 个设备，失败设备: {:?}",
+                  work.id, success_count, device_count, failed_devices);
+        }
+
         Ok(())
     }
 
@@ -559,11 +568,12 @@ impl MiningCore for SoftwareMiningCore {
         for (device_id, device) in devices.iter_mut() {
             match device.get_result().await {
                 Ok(Some(result)) => {
-                    debug!("设备 {} 产生挖矿结果: nonce={:08x}", device_id, result.nonce);
+                    // 只在找到有效结果时记录，使用info级别因为这是重要信息
+                    info!("💎 设备 {} 发现有效结果: nonce={:08x}", device_id, result.nonce);
                     results.push(result);
                 }
                 Ok(None) => {
-                    // 没有结果 - 这是正常的
+                    // 没有结果 - 这是正常的，不记录日志
                 },
                 Err(e) => {
                     warn!("获取设备 {} 挖矿结果失败: {}", device_id, e);
@@ -571,7 +581,11 @@ impl MiningCore for SoftwareMiningCore {
             }
         }
 
-        debug!("收集到 {} 个挖矿结果", results.len());
+        // 只在有结果时才记录
+        if !results.is_empty() {
+            info!("🎯 本轮收集到 {} 个有效挖矿结果", results.len());
+        }
+
         Ok(results)
     }
 

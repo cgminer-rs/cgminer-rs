@@ -8,11 +8,11 @@ api_port = 4028
 api_bind = "0.0.0.0"
 
 [cores]
-enabled_cores = ["software"]
-default_core = "software"
+enabled_cores = ["btc-software"]
+default_core = "btc-software"
 
-# 软算法核心配置 - 32个设备
-[cores.software_core]
+# Bitcoin软算法核心配置 - 32个设备
+[cores.btc_software]
 enabled = true
 device_count = 32            # 32个软算法设备
 min_hashrate = 500000000.0   # 最小算力: 500 MH/s
@@ -22,14 +22,14 @@ batch_size = 3000            # 批处理大小
 work_timeout_ms = 2000       # 工作超时: 2秒
 
 # CPU绑定配置 - 32设备优化
-[cores.software_core.cpu_affinity]
+[cores.btc_software.cpu_affinity]
 enabled = true               # 启用CPU绑定
 strategy = "round_robin"     # 轮询分配策略
 # 对于32个设备，系统需要有足够的CPU核心
 # 建议至少16核心CPU，每2个设备共享1个核心
 
-# 禁用ASIC核心
-[cores.asic_core]
+# 禁用Maijie L7 ASIC核心
+[cores.maijie_l7]
 enabled = false
 chain_count = 3
 spi_speed = 6000000
@@ -63,7 +63,7 @@ priority = 2
 
 [monitoring]
 enabled = false              # 32设备时建议禁用复杂监控以减少开销
-prometheus_port = 9090
+web_port = 8888
 metrics_interval = 30
 
 [web]

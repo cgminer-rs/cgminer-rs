@@ -303,15 +303,72 @@ impl Hashmeter {
         }
     }
 
-    /// 格式化算力显示
+    /// 格式化算力显示（改进的单位处理）
     fn format_hashrate(hashrate: f64, unit: &str) -> String {
+        // 处理特殊情况
+        if hashrate <= 0.0 {
+            return format!("0.00 {}/s", unit);
+        }
+
         match unit {
             "H" => format!("{:.2} H/s", hashrate),
-            "KH" => format!("{:.2} KH/s", hashrate / 1_000.0),
-            "MH" => format!("{:.2} MH/s", hashrate / 1_000_000.0),
-            "GH" => format!("{:.2} GH/s", hashrate / 1_000_000_000.0),
-            "TH" => format!("{:.2} TH/s", hashrate / 1_000_000_000_000.0),
-            _ => format!("{:.2} GH/s", hashrate / 1_000_000_000.0),
+            "KH" => {
+                let kh_value = hashrate / 1_000.0;
+                if kh_value < 0.01 {
+                    format!("{:.6} KH/s", kh_value)
+                } else {
+                    format!("{:.2} KH/s", kh_value)
+                }
+            },
+            "MH" => {
+                let mh_value = hashrate / 1_000_000.0;
+                if mh_value < 0.01 {
+                    format!("{:.6} MH/s", mh_value)
+                } else {
+                    format!("{:.2} MH/s", mh_value)
+                }
+            },
+            "GH" => {
+                let gh_value = hashrate / 1_000_000_000.0;
+                if gh_value < 0.01 {
+                    format!("{:.6} GH/s", gh_value)
+                } else {
+                    format!("{:.2} GH/s", gh_value)
+                }
+            },
+            "TH" => {
+                let th_value = hashrate / 1_000_000_000_000.0;
+                if th_value < 0.01 {
+                    format!("{:.6} TH/s", th_value)
+                } else {
+                    format!("{:.2} TH/s", th_value)
+                }
+            },
+            _ => {
+                // 默认使用自动单位选择
+                Self::format_hashrate_auto(hashrate)
+            }
+        }
+    }
+
+    /// 自动选择最合适的单位进行格式化
+    fn format_hashrate_auto(hashrate: f64) -> String {
+        if hashrate <= 0.0 {
+            return "0.00 H/s".to_string();
+        }
+
+        if hashrate >= 1_000_000_000_000.0 {
+            format!("{:.2} TH/s", hashrate / 1_000_000_000_000.0)
+        } else if hashrate >= 1_000_000_000.0 {
+            format!("{:.2} GH/s", hashrate / 1_000_000_000.0)
+        } else if hashrate >= 1_000_000.0 {
+            format!("{:.2} MH/s", hashrate / 1_000_000.0)
+        } else if hashrate >= 1_000.0 {
+            format!("{:.2} KH/s", hashrate / 1_000.0)
+        } else if hashrate >= 1.0 {
+            format!("{:.2} H/s", hashrate)
+        } else {
+            format!("{:.6} H/s", hashrate)
         }
     }
 

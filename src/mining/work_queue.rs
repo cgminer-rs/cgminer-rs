@@ -1,11 +1,12 @@
-use crate::device::{Work, MiningResult};
+use crate::device::Work;
+use cgminer_core::types::MiningResult;
 use crate::error::WorkError;
 use crate::mining::{WorkItem, ResultItem, WorkDistributionStrategy};
 use std::collections::{VecDeque, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, Mutex, Notify};
-use tracing::{info, debug};
+use tracing::{info, debug, warn};
 use uuid::Uuid;
 
 /// 工作队列
@@ -30,26 +31,26 @@ impl WorkQueue {
             stats: WorkQueueStats::new(),
         }
     }
-    
+
     /// 添加工作
     pub fn push(&mut self, work_item: WorkItem) -> Result<(), WorkError> {
         if self.queue.len() >= self.max_size {
             return Err(WorkError::QueueFull);
         }
-        
+
         // 检查是否重复
         if self.work_map.contains_key(&work_item.work.id) {
             return Err(WorkError::Duplicate { work_id: work_item.work.id.to_string() });
         }
-        
+
         // 添加到队列和映射
         self.work_map.insert(work_item.work.id, work_item.clone());
         self.queue.push_back(work_item);
         self.stats.total_added += 1;
-        
+
         Ok(())
     }
-    
+
     /// 获取工作
     pub fn pop(&mut self) -> Option<WorkItem> {
         if let Some(work_item) = self.queue.pop_front() {
@@ -60,24 +61,24 @@ impl WorkQueue {
             None
         }
     }
-    
+
     /// 按优先级获取工作
     pub fn pop_by_priority(&mut self) -> Option<WorkItem> {
         if self.queue.is_empty() {
             return None;
         }
-        
+
         // 找到最高优先级的工作
         let mut max_priority = 0;
         let mut max_index = 0;
-        
+
         for (index, work_item) in self.queue.iter().enumerate() {
             if work_item.priority > max_priority {
                 max_priority = work_item.priority;
                 max_index = index;
             }
         }
-        
+
         if let Some(work_item) = self.queue.remove(max_index) {
             self.work_map.remove(&work_item.work.id);
             self.stats.total_processed += 1;
@@ -86,7 +87,7 @@ impl WorkQueue {
             None
         }
     }
-    
+
     /// 获取指定设备的工作
     pub fn pop_for_device(&mut self, device_id: u32) -> Option<WorkItem> {
         // 首先查找分配给特定设备的工作
@@ -101,7 +102,7 @@ impl WorkQueue {
                 }
             }
         }
-        
+
         // 如果没有专门分配的工作，返回第一个未分配的工作
         for i in 0..self.queue.len() {
             if self.queue[i].assigned_device.is_none() {
@@ -113,15 +114,15 @@ impl WorkQueue {
                 }
             }
         }
-        
+
         None
     }
-    
+
     /// 清理过期工作
     pub fn cleanup_expired(&mut self) -> usize {
         let mut removed_count = 0;
         let mut i = 0;
-        
+
         while i < self.queue.len() {
             if self.queue[i].is_expired() {
                 if let Some(work_item) = self.queue.remove(i) {
@@ -133,30 +134,30 @@ impl WorkQueue {
                 i += 1;
             }
         }
-        
+
         removed_count
     }
-    
+
     /// 获取队列大小
     pub fn len(&self) -> usize {
         self.queue.len()
     }
-    
+
     /// 检查队列是否为空
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
-    
+
     /// 检查队列是否已满
     pub fn is_full(&self) -> bool {
         self.queue.len() >= self.max_size
     }
-    
+
     /// 获取统计信息
     pub fn get_stats(&self) -> &WorkQueueStats {
         &self.stats
     }
-    
+
     /// 清空队列
     pub fn clear(&mut self) {
         self.queue.clear();
@@ -187,26 +188,26 @@ impl ResultQueue {
             stats: ResultQueueStats::new(),
         }
     }
-    
+
     /// 添加结果
     pub fn push(&mut self, result_item: ResultItem) -> Result<(), WorkError> {
         if self.queue.len() >= self.max_size {
             return Err(WorkError::QueueFull);
         }
-        
+
         // 检查是否重复
         if self.result_map.contains_key(&result_item.result.work_id) {
             return Err(WorkError::Duplicate { work_id: result_item.result.work_id.to_string() });
         }
-        
+
         // 添加到队列和映射
         self.result_map.insert(result_item.result.work_id, result_item.clone());
         self.queue.push_back(result_item);
         self.stats.total_added += 1;
-        
+
         Ok(())
     }
-    
+
     /// 获取结果
     pub fn pop(&mut self) -> Option<ResultItem> {
         if let Some(result_item) = self.queue.pop_front() {
@@ -217,7 +218,7 @@ impl ResultQueue {
             None
         }
     }
-    
+
     /// 获取有效结果
     pub fn pop_valid(&mut self) -> Option<ResultItem> {
         for i in 0..self.queue.len() {
@@ -231,22 +232,22 @@ impl ResultQueue {
         }
         None
     }
-    
+
     /// 获取队列大小
     pub fn len(&self) -> usize {
         self.queue.len()
     }
-    
+
     /// 检查队列是否为空
     pub fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
-    
+
     /// 获取统计信息
     pub fn get_stats(&self) -> &ResultQueueStats {
         &self.stats
     }
-    
+
     /// 清空队列
     pub fn clear(&mut self) {
         self.queue.clear();
@@ -290,54 +291,60 @@ impl WorkQueueManager {
             running: Arc::new(RwLock::new(false)),
         }
     }
-    
+
     /// 启动队列管理器
     pub async fn start(&self) -> Result<(), WorkError> {
         info!("Starting work queue manager");
-        
+
         *self.running.write().await = true;
-        
+
         // 启动清理任务
         self.start_cleanup_task().await;
-        
+
         info!("Work queue manager started");
         Ok(())
     }
-    
+
     /// 停止队列管理器
     pub async fn stop(&self) -> Result<(), WorkError> {
         info!("Stopping work queue manager");
-        
+
         *self.running.write().await = false;
-        
+
         // 停止清理任务
         if let Some(handle) = self.cleanup_handle.lock().await.take() {
             handle.abort();
         }
-        
+
         info!("Work queue manager stopped");
         Ok(())
     }
-    
+
     /// 提交工作
     pub async fn submit_work(&self, work: Work) -> Result<(), WorkError> {
         let work_item = WorkItem::new(work);
-        
+
+        // 验证工作数据完整性
+        if let Err(validation_error) = work_item.validate_work_integrity() {
+            warn!("Work validation failed: {}", validation_error);
+            return Err(WorkError::InvalidData { reason: validation_error });
+        }
+
         {
             let mut queue = self.work_queue.lock().await;
             queue.push(work_item)?;
         }
-        
+
         // 通知有新工作
         self.work_notify.notify_waiters();
-        
+
         Ok(())
     }
-    
+
     /// 获取工作
     pub async fn get_work(&self, device_id: Option<u32>) -> Option<WorkItem> {
         let mut queue = self.work_queue.lock().await;
-        
+
         match self.distribution_strategy {
             WorkDistributionStrategy::RoundRobin => queue.pop(),
             WorkDistributionStrategy::Priority => queue.pop_by_priority(),
@@ -363,67 +370,67 @@ impl WorkQueueManager {
             }
         }
     }
-    
+
     /// 等待工作
     pub async fn wait_for_work(&self) {
         self.work_notify.notified().await;
     }
-    
+
     /// 提交结果
     pub async fn submit_result(&self, result: MiningResult, work_item: WorkItem) -> Result<(), WorkError> {
         let result_item = ResultItem::new(result, work_item);
-        
+
         {
             let mut queue = self.result_queue.lock().await;
             queue.push(result_item)?;
         }
-        
+
         // 通知有新结果
         self.result_notify.notify_waiters();
-        
+
         Ok(())
     }
-    
+
     /// 获取结果
     pub async fn get_result(&self) -> Option<ResultItem> {
         let mut queue = self.result_queue.lock().await;
         queue.pop()
     }
-    
+
     /// 获取有效结果
     pub async fn get_valid_result(&self) -> Option<ResultItem> {
         let mut queue = self.result_queue.lock().await;
         queue.pop_valid()
     }
-    
+
     /// 等待结果
     pub async fn wait_for_result(&self) {
         self.result_notify.notified().await;
     }
-    
+
     /// 获取工作队列统计
     pub async fn get_work_queue_stats(&self) -> WorkQueueStats {
         let queue = self.work_queue.lock().await;
         queue.get_stats().clone()
     }
-    
+
     /// 获取结果队列统计
     pub async fn get_result_queue_stats(&self) -> ResultQueueStats {
         let queue = self.result_queue.lock().await;
         queue.get_stats().clone()
     }
-    
+
     /// 启动清理任务
     async fn start_cleanup_task(&self) {
         let work_queue = self.work_queue.clone();
         let running = self.running.clone();
-        
+
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(30));
-            
+
             while *running.read().await {
                 interval.tick().await;
-                
+
                 // 清理过期工作
                 let mut queue = work_queue.lock().await;
                 let removed = queue.cleanup_expired();
@@ -432,7 +439,7 @@ impl WorkQueueManager {
                 }
             }
         });
-        
+
         *self.cleanup_handle.lock().await = Some(handle);
     }
 }

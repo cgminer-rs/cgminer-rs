@@ -49,26 +49,7 @@ services:
     profiles:
       - dev
 
-  # Monitoring with Prometheus
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: cgminer-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus-data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
-    networks:
-      - cgminer-network
-    profiles:
-      - monitoring
+  # Note: Prometheus monitoring removed - using simple built-in web monitoring instead
 
   # Grafana for visualization
   grafana:
@@ -87,8 +68,7 @@ services:
       - cgminer-network
     profiles:
       - monitoring
-    depends_on:
-      - prometheus
+    # Note: Grafana can still be used with built-in monitoring via API endpoints
 
   # Redis for caching and session storage
   redis:
@@ -230,8 +210,7 @@ volumes:
     driver: local
   cgminer-data:
     driver: local
-  prometheus-data:
-    driver: local
+
   grafana-data:
     driver: local
   redis-data:

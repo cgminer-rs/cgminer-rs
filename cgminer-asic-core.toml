@@ -127,7 +127,7 @@ allow_origins = ["*"]
 [monitoring]
 enabled = true
 metrics_interval = 30
-prometheus_port = 9090
+web_port = 8888  # 使用简单的内置Web监控
 
 [monitoring.alert_thresholds]
 temperature_warning = 80.0

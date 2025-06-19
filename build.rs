@@ -1,5 +1,5 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
@@ -45,7 +45,7 @@ fn main() {
     check_dependencies(&target_os);
 }
 
-fn compile_c_drivers(out_path: &PathBuf) {
+fn compile_c_drivers(out_path: &Path) {
     let mut build = cc::Build::new();
 
     build
@@ -85,7 +85,7 @@ fn compile_c_drivers(out_path: &PathBuf) {
     println!("cargo:rustc-link-lib=static=maijie_l7");
 }
 
-fn generate_bindings(out_path: &PathBuf) {
+fn generate_bindings(out_path: &Path) {
     // 使用 bindgen 生成 Rust 绑定
     let bindings = bindgen::Builder::default()
         .header("drivers/maijie_l7.h")
@@ -151,7 +151,7 @@ fn link_libraries(target_os: &str, target_arch: &str) {
 }
 
 /// 生成版本信息
-fn generate_version_info(out_path: &PathBuf) {
+fn generate_version_info(out_path: &Path) {
     // 获取 Git 信息
     let git_hash = get_git_hash().unwrap_or_else(|| "unknown".to_string());
     let git_branch = get_git_branch().unwrap_or_else(|| "unknown".to_string());
@@ -210,7 +210,7 @@ impl BuildInfo {{
 /// 获取 Git 哈希
 fn get_git_hash() -> Option<String> {
     Command::new("git")
-        .args(&["rev-parse", "--short", "HEAD"])
+        .args(["rev-parse", "--short", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -225,7 +225,7 @@ fn get_git_hash() -> Option<String> {
 /// 获取 Git 分支
 fn get_git_branch() -> Option<String> {
     Command::new("git")
-        .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+        .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
         .ok()
         .and_then(|output| {
@@ -311,7 +311,7 @@ fn check_dependencies(target_os: &str) {
 /// 检查库是否存在
 fn check_library_exists(lib_name: &str) {
     let output = Command::new("pkg-config")
-        .args(&["--exists", lib_name])
+        .args(["--exists", lib_name])
         .output();
 
     match output {

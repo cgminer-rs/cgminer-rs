@@ -119,7 +119,6 @@ impl SoftwareDevice {
     /// 执行真实的挖矿过程（基于实际哈希次数）
     async fn mine_work(&self, work: &Work) -> Result<Option<MiningResult>, DeviceError> {
         let device_id = self.device_id();
-        debug!("设备 {} 开始挖矿工作 {}", device_id, work.id);
 
         let start_time = Instant::now();
         let mut hashes_done = 0u64;
@@ -338,8 +337,6 @@ impl MiningDevice for SoftwareDevice {
 
     /// 提交工作
     async fn submit_work(&mut self, work: Work) -> Result<(), DeviceError> {
-        debug!("向软算法设备 {} 提交工作 {}", self.device_id(), work.id);
-
         {
             let mut current_work = self.current_work.lock().await;
             *current_work = Some(work);
@@ -361,11 +358,6 @@ impl MiningDevice for SoftwareDevice {
 
             // 执行挖矿
             let result = self.mine_work(&work).await?;
-
-            if let Some(ref mining_result) = result {
-                debug!("设备 {} 完成挖矿: nonce={:08x}, valid={}",
-                    self.device_id(), mining_result.nonce, mining_result.meets_target);
-            }
 
             Ok(result)
         } else {

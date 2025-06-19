@@ -10,13 +10,13 @@ scan_time = 10  # 测试时更频繁扫描
 
 [cores]
 # 启用的核心类型列表 - 仅软算法核心
-enabled_cores = ["software"]
+enabled_cores = ["btc-software"]
 
 # 默认使用的核心类型
-default_core = "software"
+default_core = "btc-software"
 
-# 软算法核心配置 (专门用于测试和开发)
-[cores.software_core]
+# Bitcoin软算法核心配置 (专门用于测试和开发)
+[cores.btc_software]
 enabled = true
 device_count = 2            # 测试时使用较少设备
 min_hashrate = 100000000.0  # 最小算力: 100 MH/s (测试用)
@@ -26,13 +26,13 @@ batch_size = 1000           # 批处理大小 (测试用较小值)
 work_timeout_ms = 5000      # 工作超时: 5秒 (测试时更长)
 
 # CPU绑定配置 - 测试环境
-[cores.software_core.cpu_affinity]
+[cores.btc_software.cpu_affinity]
 enabled = true              # 测试时也启用CPU绑定
 strategy = "round_robin"    # 轮询策略适合测试
 # manual_mapping = { 0 = 0, 1 = 1 }  # 测试时可以手动指定
 
-# ASIC核心配置 (测试时禁用)
-[cores.asic_core]
+# Maijie L7 ASIC核心配置 (测试时禁用)
+[cores.maijie_l7]
 enabled = false
 chain_count = 3
 spi_speed = 6000000
@@ -91,7 +91,7 @@ allow_origins = ["*"]
 [monitoring]
 enabled = true
 metrics_interval = 10  # 测试时更频繁收集指标
-prometheus_port = 9090
+web_port = 8888  # 使用简单的内置Web监控
 
 [monitoring.alert_thresholds]
 temperature_warning = 60.0  # 测试时使用较低阈值

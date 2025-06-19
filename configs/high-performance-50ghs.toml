@@ -120,9 +120,7 @@ allow_origins = ["*"]
 [monitoring]
 enabled = true
 metrics_interval = 20  # 更频繁的监控
-
-# Prometheus指标
-prometheus_port = 9090
+web_port = 8888  # 使用简单的内置Web监控
 
 # 告警阈值配置 - 针对50+ GH/s目标
 [monitoring.alert_thresholds]

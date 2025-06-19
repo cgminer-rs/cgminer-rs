@@ -53,19 +53,17 @@ fn create_test_work(id: u64) -> Work {
     header[76..80].copy_from_slice(&0u32.to_le_bytes());
 
     // 创建目标值 - 设置较低的难度
-    let mut target = vec![0xffu8; 32];
+    let mut target = [0xffu8; 32];
     target[0] = 0x00;
     target[1] = 0x00;
     target[2] = 0x7f;
 
-    Work {
-        id,
-        header,
+    Work::new(
+        format!("test_job_{}", id),
         target,
-        timestamp: SystemTime::now(),
-        difficulty: 1.0,
-        extranonce: vec![0u8; 4],
-    }
+        header,
+        1.0,
+    )
 }
 
 /// 简单哈希计算性能基准测试

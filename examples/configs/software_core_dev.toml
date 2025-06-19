@@ -114,7 +114,7 @@ allow_origins = ["*"]
 [monitoring]
 enabled = true
 metrics_interval = 10       # 更频繁的监控用于开发
-prometheus_port = 9091      # 不同的端口避免冲突
+web_port = 8889             # 开发环境使用不同端口避免冲突
 
 [monitoring.alert_thresholds]
 # 开发环境的宽松阈值

@@ -59,6 +59,8 @@ impl PoolManager {
                 pool_info.url.clone(),
                 pool_info.user.clone(),
                 pool_info.password.clone(),
+                pool_id,
+                false, // 默认不启用详细日志
             ).await?;
 
             pools.insert(pool_id, Arc::new(Mutex::new(pool)));
@@ -409,6 +411,63 @@ impl PoolManager {
         }
     }
 
+    /// 从挖矿结果提交份额
+    pub async fn submit_mining_result(&self, mining_result: &cgminer_core::types::MiningResult) -> Result<bool, PoolError> {
+        let active_pool_id = self.active_pool.read().await;
+
+        if let Some(pool_id) = *active_pool_id {
+            // 创建临时的Share对象用于提交
+            // 注意：这里我们缺少一些必要的信息（如job_id和ntime），
+            // 在实际实现中，这些信息应该从工作管理器或其他地方获取
+            let share = Share {
+                id: uuid::Uuid::new_v4(),
+                pool_id,
+                work_id: mining_result.work_id,
+                device_id: mining_result.device_id,
+                job_id: format!("unknown_job_{}", mining_result.work_id), // 临时job_id
+                extra_nonce2: hex::encode(&mining_result.extranonce2),
+                nonce: mining_result.nonce,
+                ntime: 0, // 临时ntime，应该从工作数据获取
+                timestamp: mining_result.timestamp,
+                difficulty: mining_result.share_difficulty,
+                status: crate::pool::ShareStatus::Pending,
+            };
+
+            let stratum_clients = self.stratum_clients.read().await;
+            if let Some(stratum_client) = stratum_clients.get(&pool_id) {
+                let client = stratum_client.lock().await;
+
+                // 提交份额并返回是否被接受
+                match client.submit_share(&share).await {
+                    Ok(accepted) => {
+                        // 更新矿池统计
+                        {
+                            let pools = self.pools.read().await;
+                            if let Some(pool) = pools.get(&pool_id) {
+                                let mut pool = pool.lock().await;
+                                if accepted {
+                                    pool.record_accepted_share(share.difficulty);
+                                } else {
+                                    pool.record_rejected_share();
+                                }
+                            }
+                        }
+
+                        Ok(accepted)
+                    }
+                    Err(e) => {
+                        error!("Failed to submit mining result to pool {}: {}", pool_id, e);
+                        Err(e)
+                    }
+                }
+            } else {
+                Err(PoolError::NoPoolsAvailable)
+            }
+        } else {
+            Err(PoolError::NoPoolsAvailable)
+        }
+    }
+
     /// 获取工作
     pub async fn get_work(&self) -> Result<Work, PoolError> {
         let active_pool_id = self.active_pool.read().await;
@@ -537,5 +596,42 @@ impl PoolManager {
 
         *self.heartbeat_handle.lock().await = Some(handle);
         Ok(())
+    }
+
+    /// 获取当前活跃矿池的难度
+    pub async fn get_current_difficulty(&self) -> Result<f64, PoolError> {
+        let active_pool_id = self.active_pool.read().await;
+
+        if let Some(pool_id) = *active_pool_id {
+            let stratum_clients = self.stratum_clients.read().await;
+            if let Some(stratum_client) = stratum_clients.get(&pool_id) {
+                let client = stratum_client.lock().await;
+                Ok(client.get_current_difficulty().await)
+            } else {
+                Err(PoolError::NoPoolsAvailable)
+            }
+        } else {
+            Err(PoolError::NoPoolsAvailable)
+        }
+    }
+
+    /// 获取所有矿池的难度信息
+    pub async fn get_all_pool_difficulties(&self) -> HashMap<u32, f64> {
+        let mut difficulties = HashMap::new();
+        let stratum_clients = self.stratum_clients.read().await;
+
+        for (pool_id, stratum_client) in stratum_clients.iter() {
+            if let Ok(client) = stratum_client.try_lock() {
+                let difficulty = client.get_current_difficulty().await;
+                difficulties.insert(*pool_id, difficulty);
+            }
+        }
+
+        difficulties
+    }
+
+    /// 获取活跃矿池ID
+    pub async fn get_active_pool_id(&self) -> Option<u32> {
+        *self.active_pool.read().await
     }
 }

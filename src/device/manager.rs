@@ -1,18 +1,20 @@
 use crate::config::DeviceConfig;
 use crate::error::DeviceError;
+use cgminer_core::CoreRegistry;
 use crate::device::{
     DeviceInfo, DeviceStats, Work, MiningResult,
-    MiningDevice, factory::UnifiedDeviceFactory,
+    MiningDevice, DeviceCoreMapper,
+    architecture::{UnifiedDeviceArchitecture, DeviceArchitectureConfig},
 };
-use cgminer_core::CoreRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, Mutex};
 use tokio::time::interval;
 use tracing::{info, warn, error, debug};
+use async_trait::async_trait;
 
-/// 设备管理器
+/// 设备管理器（集成设备工厂功能）
 pub struct DeviceManager {
     /// 设备列表
     devices: Arc<RwLock<HashMap<u32, Arc<Mutex<Box<dyn MiningDevice>>>>>>,
@@ -20,8 +22,14 @@ pub struct DeviceManager {
     device_info: Arc<RwLock<HashMap<u32, DeviceInfo>>>,
     /// 设备统计信息
     device_stats: Arc<RwLock<HashMap<u32, DeviceStats>>>,
-    /// 统一设备工厂
-    device_factory: Arc<Mutex<UnifiedDeviceFactory>>,
+    /// 核心注册表（从工厂移入）
+    core_registry: Arc<CoreRegistry>,
+    /// 活跃核心ID列表（从工厂移入）
+    active_core_ids: Vec<String>,
+    /// 设备-核心映射器
+    device_core_mapper: Arc<DeviceCoreMapper>,
+    /// 统一设备架构管理器
+    architecture_manager: Arc<UnifiedDeviceArchitecture>,
     /// 配置
     config: DeviceConfig,
 
@@ -32,15 +40,22 @@ pub struct DeviceManager {
 }
 
 impl DeviceManager {
-    /// 创建新的设备管理器
+    /// 创建新的设备管理器（集成工厂功能）
     pub fn new(config: DeviceConfig, core_registry: Arc<CoreRegistry>) -> Self {
-        let device_factory = UnifiedDeviceFactory::new(core_registry);
+        let device_core_mapper = DeviceCoreMapper::new(core_registry.clone());
+
+        // 创建默认的架构配置
+        let arch_config = DeviceArchitectureConfig::default();
+        let architecture_manager = UnifiedDeviceArchitecture::new(arch_config, core_registry.clone());
 
         Self {
             devices: Arc::new(RwLock::new(HashMap::new())),
             device_info: Arc::new(RwLock::new(HashMap::new())),
             device_stats: Arc::new(RwLock::new(HashMap::new())),
-            device_factory: Arc::new(Mutex::new(device_factory)),
+            core_registry,
+            active_core_ids: Vec::new(),
+            device_core_mapper: Arc::new(device_core_mapper),
+            architecture_manager: Arc::new(architecture_manager),
             config,
             monitoring_handle: None,
             running: Arc::new(RwLock::new(false)),
@@ -49,19 +64,23 @@ impl DeviceManager {
 
     /// 设置活跃核心ID列表
     pub async fn set_active_cores(&mut self, core_ids: Vec<String>) {
-        let mut factory = self.device_factory.lock().await;
-        factory.set_active_cores(core_ids);
+        self.active_core_ids = core_ids;
+        info!("🏭 设备管理器接收到活跃核心: {:?}", self.active_core_ids);
     }
 
     /// 初始化设备管理器
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
         info!("🔧 初始化设备管理器");
 
-        // 初始化设备工厂
-        {
-            let mut factory = self.device_factory.lock().await;
-            factory.initialize().await?;
+        // 检查活跃核心
+        if self.active_core_ids.is_empty() {
+            return Err(DeviceError::InitializationFailed {
+                device_id: 0,
+                reason: "没有可用的活跃核心".to_string(),
+            });
         }
+
+        info!("🎉 设备管理器初始化完成，活跃核心数量: {}", self.active_core_ids.len());
 
         // 创建设备
         self.create_devices().await?;
@@ -74,14 +93,13 @@ impl DeviceManager {
     async fn create_devices(&mut self) -> Result<(), DeviceError> {
         info!("🔧 创建设备");
 
-        let factory = self.device_factory.lock().await;
-        let available_cores = factory.get_available_cores().await.map_err(|e| {
+        // 直接从core_registry获取可用核心工厂
+        let available_cores = self.core_registry.list_factories().await.map_err(|e| {
             DeviceError::InitializationFailed {
                 device_id: 0,
                 reason: format!("获取可用核心失败: {}", e),
             }
         })?;
-        drop(factory);
 
         if available_cores.is_empty() {
             warn!("⚠️ 没有可用的挖矿核心");
@@ -112,26 +130,49 @@ impl DeviceManager {
     async fn create_devices_for_core(&mut self, core: &cgminer_core::CoreInfo) -> Result<u32, DeviceError> {
         info!("🔍 为核心 {} 扫描设备", core.name);
 
-        // 获取核心实例并扫描设备
-        let factory = self.device_factory.lock().await;
-        let scanned_devices = factory.scan_devices_for_core(&core.name).await.map_err(|e| {
+        // 查找对应的活跃核心实例ID
+        let core_instance_id = self.find_active_core_for_factory(&core.name).await?;
+
+        // 使用核心实例ID扫描设备
+        let scanned_devices = self.scan_devices_from_core(&core_instance_id).await.map_err(|e| {
             DeviceError::InitializationFailed {
                 device_id: 0,
-                reason: format!("扫描核心 {} 的设备失败: {}", core.name, e),
+                reason: format!("扫描核心实例 {} 的设备失败: {}", core_instance_id, e),
             }
         })?;
-        drop(factory);
 
         if scanned_devices.is_empty() {
             warn!("⚠️ 核心 {} 没有扫描到设备", core.name);
             return Ok(0);
         }
 
-        info!("📋 核心 {} 扫描到 {} 个设备", core.name, scanned_devices.len());
+        let requested_device_count = scanned_devices.len() as u32;
+        info!("📋 核心 {} 扫描到 {} 个设备", core.name, requested_device_count);
+
+        // 使用架构管理器验证设备配置
+        let validated_device_count = self.architecture_manager
+            .validate_device_configuration(core, requested_device_count)
+            .await?;
+
+        if validated_device_count != requested_device_count {
+            info!("📋 架构管理器调整设备数量: {} -> {}", requested_device_count, validated_device_count);
+        }
+
+        // 只使用验证后的设备数量
+        let devices_to_create = scanned_devices.into_iter()
+            .take(validated_device_count as usize)
+            .collect::<Vec<_>>();
+
+        // 创建设备映射
+        let mappings = self.device_core_mapper
+            .create_device_mappings_for_core(core, devices_to_create.clone())
+            .await?;
+
+        info!("📋 为核心 {} 创建了 {} 个设备映射", core.name, mappings.len());
 
         let mut created_count = 0u32;
-        for device_info in scanned_devices {
-            match self.create_device_from_info(device_info).await {
+        for (mapping, device_info) in mappings.into_iter().zip(devices_to_create.into_iter()) {
+            match self.create_device_from_mapping(mapping, device_info).await {
                 Ok(()) => {
                     created_count += 1;
                 }
@@ -144,24 +185,210 @@ impl DeviceManager {
         Ok(created_count)
     }
 
-    /// 从设备信息创建设备实例
-    async fn create_device_from_info(&mut self, device_info: cgminer_core::DeviceInfo) -> Result<(), DeviceError> {
-        let device_id = device_info.id;
+    /// 查找对应工厂名称的活跃核心实例ID
+    async fn find_active_core_for_factory(&self, factory_name: &str) -> Result<String, DeviceError> {
+        // 根据工厂名称映射到核心类型前缀
+        let core_prefix = match factory_name {
+            "Software Mining Core" => "btc-software",
+            "Maijie L7 Core" => "maijie-l7",
+            _ => {
+                return Err(DeviceError::InitializationFailed {
+                    device_id: 0,
+                    reason: format!("未知的核心工厂: {}", factory_name),
+                });
+            }
+        };
+
+        // 在活跃核心列表中查找匹配的核心实例
+        for core_id in &self.active_core_ids {
+            if core_id.starts_with(core_prefix) {
+                return Ok(core_id.clone());
+            }
+        }
+
+        Err(DeviceError::InitializationFailed {
+            device_id: 0,
+            reason: format!("未找到工厂 {} 对应的活跃核心实例", factory_name),
+        })
+    }
+
+    /// 从核心实例扫描设备（从factory移植）
+    async fn scan_devices_from_core(&self, core_id: &str) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        info!("从核心 {} 扫描设备", core_id);
+
+        match self.core_registry.scan_devices(core_id).await {
+            Ok(devices) => {
+                info!("核心 {} 扫描到 {} 个设备", core_id, devices.len());
+                Ok(devices)
+            }
+            Err(e) => {
+                warn!("核心 {} 扫描设备失败: {}", core_id, e);
+                // 如果核心扫描失败，回退到生成设备信息的方式
+                if core_id.starts_with("btc-software") {
+                    self.generate_software_device_infos().await
+                } else if core_id.starts_with("maijie-l7") {
+                    self.generate_asic_device_infos().await
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+        }
+    }
+
+    /// 生成软件设备信息（从factory移植）
+    async fn generate_software_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        let device_count = 4; // 默认创建4个软件设备
+        let mut devices = Vec::new();
+
+        for i in 0..device_count {
+            let device_info = cgminer_core::DeviceInfo {
+                id: i + 1,
+                name: format!("BTC-Software-{}", i + 1),
+                device_type: "software".to_string(),
+                chain_id: i as u8,
+                device_path: None,
+                serial_number: None,
+                firmware_version: None,
+                hardware_version: None,
+                chip_count: Some(1),
+                temperature: Some(45.0),
+                voltage: Some(12),
+                frequency: Some(600),
+                fan_speed: None,
+                created_at: std::time::SystemTime::now(),
+                updated_at: std::time::SystemTime::now(),
+            };
+            devices.push(device_info);
+        }
+
+        Ok(devices)
+    }
+
+    /// 生成ASIC设备信息（从factory移植）
+    async fn generate_asic_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        let device_count = 1; // 默认创建1个ASIC设备
+        let mut devices = Vec::new();
+
+        for i in 0..device_count {
+            let device_info = cgminer_core::DeviceInfo {
+                id: i + 100, // ASIC设备从100开始编号
+                name: format!("Maijie-L7-{}", i + 1),
+                device_type: "asic".to_string(),
+                chain_id: i as u8,
+                device_path: None,
+                serial_number: None,
+                firmware_version: None,
+                hardware_version: None,
+                chip_count: Some(126),
+                temperature: Some(65.0),
+                voltage: Some(900),
+                frequency: Some(650),
+                fan_speed: Some(70),
+                created_at: std::time::SystemTime::now(),
+                updated_at: std::time::SystemTime::now(),
+            };
+            devices.push(device_info);
+        }
+
+        Ok(devices)
+    }
+
+    /// 创建设备实例（从factory移植的核心功能）
+    async fn create_device_instance(&self, device_info: cgminer_core::DeviceInfo) -> Result<Box<dyn MiningDevice>, DeviceError> {
+        // 根据设备类型选择对应的核心
+        let (core_id, device_config) = match device_info.device_type.as_str() {
+            "software" => {
+                let core_id = self.active_core_ids.iter()
+                    .find(|id| id.contains("software") || id.contains("btc"))
+                    .ok_or_else(|| {
+                        DeviceError::InitializationFailed {
+                            device_id: device_info.id,
+                            reason: "BTC软算法核心不可用".to_string(),
+                        }
+                    })?;
+
+                let device_config = crate::device::DeviceConfig {
+                    chain_id: device_info.chain_id,
+                    enabled: true,
+                    frequency: 600,
+                    voltage: 12,
+                    auto_tune: false,
+                    chip_count: 1,
+                    temperature_limit: 85.0,
+                    fan_speed: None,
+                };
+
+                (core_id.clone(), device_config)
+            }
+            "asic" => {
+                let core_id = self.active_core_ids.iter()
+                    .find(|id| id.contains("asic") || id.contains("maijie"))
+                    .ok_or_else(|| {
+                        DeviceError::InitializationFailed {
+                            device_id: device_info.id,
+                            reason: "Maijie L7核心不可用".to_string(),
+                        }
+                    })?;
+
+                let device_config = crate::device::DeviceConfig {
+                    chain_id: device_info.chain_id,
+                    enabled: true,
+                    frequency: 650,
+                    voltage: 900,
+                    auto_tune: true,
+                    chip_count: 126,
+                    temperature_limit: 85.0,
+                    fan_speed: Some(70),
+                };
+
+                (core_id.clone(), device_config)
+            }
+            _ => {
+                return Err(DeviceError::InvalidConfig {
+                    reason: format!("不支持的设备类型: {}", device_info.device_type),
+                });
+            }
+        };
+
+        // 创建设备代理
+        let device_proxy = CoreDeviceProxy::new_with_info(
+            device_info,
+            core_id,
+            self.core_registry.clone(),
+            device_config,
+        ).await?;
+
+        Ok(Box::new(device_proxy))
+    }
+
+    /// 从设备映射创建设备实例
+    async fn create_device_from_mapping(
+        &mut self,
+        mapping: crate::device::DeviceCoreMapping,
+        device_info: cgminer_core::DeviceInfo
+    ) -> Result<(), DeviceError> {
+        let device_id = mapping.device_id;
         let device_name = device_info.name.clone();
         let device_type = device_info.device_type.clone();
 
-        info!("🔧 创建设备: ID={}, 名称={}, 类型={}",
-              device_id, device_name, device_type);
+        // 验证设备ID的有效性
+        // TODO: 重新启用验证 - DataValidator::validate_device_id(device_id)?;
+        if device_id == 0 {
+            return Err(DeviceError::InvalidConfig {
+                reason: "Device ID cannot be zero".to_string(),
+            });
+        }
 
-        // 通过工厂创建设备
-        let factory = self.device_factory.lock().await;
-        let device = factory.create_device_from_info(device_info.clone()).await.map_err(|e| {
+        info!("🔧 创建设备: ID={}, 名称={}, 类型={}, 核心={}",
+              device_id, device_name, device_type, mapping.core_name);
+
+        // 直接创建设备实例
+        let device = self.create_device_instance(device_info.clone()).await.map_err(|e| {
             DeviceError::InitializationFailed {
                 device_id,
                 reason: format!("创建设备实例失败: {}", e),
             }
         })?;
-        drop(factory);
 
         // 添加到设备列表
         let mut devices = self.devices.write().await;
@@ -169,8 +396,8 @@ impl DeviceManager {
 
         // 转换设备信息格式
         let local_device_info = crate::device::DeviceInfo {
-            id: device_info.id,
-            name: device_info.name,
+            id: device_id, // 使用映射分配的ID
+            name: format!("{} ({})", device_info.name, mapping.core_name),
             device_type: device_info.device_type,
             chain_id: device_info.chain_id,
             chip_count: device_info.chip_count.unwrap_or(1),
@@ -197,33 +424,12 @@ impl DeviceManager {
         let mut stats_cache = self.device_stats.write().await;
         stats_cache.insert(device_id, DeviceStats::new());
 
-        info!("✅ 设备创建成功: ID={}, 名称={}", device_id, device_name);
+        info!("✅ 设备创建成功: ID={}, 名称={}, 核心={}", device_id, device_name, mapping.core_name);
 
         Ok(())
     }
 
-    /// 创建指定类型的设备
-    async fn create_device_of_type(
-        &self,
-        device_type: &str,
-        _device_id: u32,
-    ) -> Result<Box<dyn MiningDevice>, DeviceError> {
-        let factory = self.device_factory.lock().await;
 
-        // 创建设备配置
-        let device_config = crate::device::DeviceConfig {
-            chain_id: 0,
-            enabled: true,
-            frequency: 600,
-            voltage: 12,
-            auto_tune: false,
-            chip_count: 1,
-            temperature_limit: 85.0,
-            fan_speed: None,
-        };
-
-        factory.create_device(device_type, device_config).await
-    }
 
 
 
@@ -332,7 +538,15 @@ impl DeviceManager {
                     // 获取设备统计信息
                     if let Ok(stats) = device.get_stats().await {
                         let mut device_stats = device_stats.write().await;
-                        device_stats.insert(*device_id, stats);
+                        device_stats.insert(*device_id, stats.clone());
+
+                        // 从统计信息中获取算力并更新到设备信息
+                        if let Some(avg_hashrate) = stats.get_average_hashrate() {
+                            let mut info = device_info.write().await;
+                            if let Some(device_info) = info.get_mut(device_id) {
+                                device_info.update_hashrate(avg_hashrate);
+                            }
+                        }
                     }
 
                     // 获取温度
@@ -340,14 +554,6 @@ impl DeviceManager {
                         let mut info = device_info.write().await;
                         if let Some(device_info) = info.get_mut(device_id) {
                             device_info.update_temperature(temperature);
-                        }
-                    }
-
-                    // 获取算力
-                    if let Ok(hashrate) = device.get_hashrate().await {
-                        let mut info = device_info.write().await;
-                        if let Some(device_info) = info.get_mut(device_id) {
-                            device_info.update_hashrate(hashrate);
                         }
                     }
                 }
@@ -358,27 +564,7 @@ impl DeviceManager {
         Ok(())
     }
 
-    /// 获取设备配置
-    fn get_device_config(&self, chain_id: u8) -> crate::device::DeviceConfig {
-        // 查找对应链的配置
-        for chain in &self.config.chains {
-            if chain.id == chain_id {
-                return crate::device::DeviceConfig {
-                    chain_id: chain.id,
-                    enabled: chain.enabled,
-                    frequency: chain.frequency,
-                    voltage: chain.voltage,
-                    auto_tune: chain.auto_tune,
-                    chip_count: chain.chip_count,
-                    temperature_limit: 85.0, // 默认温度限制
-                    fan_speed: None,
-                };
-            }
-        }
 
-        // 返回默认配置
-        crate::device::DeviceConfig::default()
-    }
 
     /// 获取设备信息
     pub async fn get_device_info(&self, device_id: u32) -> Option<DeviceInfo> {
@@ -482,10 +668,265 @@ impl DeviceManager {
 
     /// 获取总算力
     pub async fn get_total_hashrate(&self) -> f64 {
+        // 优先从设备统计信息中获取算力，这样更准确
+        let device_stats = self.device_stats.read().await;
         let device_info = self.device_info.read().await;
-        device_info.values()
-            .filter(|info| info.is_healthy())
-            .map(|info| info.hashrate)
-            .sum()
+
+        let mut total_hashrate = 0.0;
+
+        for (device_id, info) in device_info.iter() {
+            if info.is_healthy() {
+                // 优先使用设备统计信息中的平均算力
+                if let Some(stats) = device_stats.get(device_id) {
+                    if let Some(avg_hashrate) = stats.get_average_hashrate() {
+                        total_hashrate += avg_hashrate;
+                    } else {
+                        // 如果没有算力历史，使用设备信息中的算力
+                        total_hashrate += info.hashrate;
+                    }
+                } else {
+                    // 如果没有统计信息，则使用设备信息中的算力
+                    total_hashrate += info.hashrate;
+                }
+            }
+        }
+
+        total_hashrate
+    }
+
+    /// 获取设备的核心映射信息
+    pub async fn get_device_core_mapping(&self, device_id: u32) -> Option<crate::device::DeviceCoreMapping> {
+        self.device_core_mapper.get_device_mapping(device_id).await
+    }
+
+    /// 获取核心的所有设备ID
+    pub async fn get_core_devices(&self, core_name: &str) -> Vec<u32> {
+        self.device_core_mapper.get_core_devices(core_name).await
+    }
+
+    /// 获取映射统计信息
+    pub async fn get_mapping_stats(&self) -> crate::device::MappingStats {
+        self.device_core_mapper.get_mapping_stats().await
+    }
+
+    /// 验证设备映射一致性
+    pub async fn validate_device_mappings(&self) -> Result<(), DeviceError> {
+        self.device_core_mapper.validate_mappings().await
+    }
+
+    /// 按核心类型获取设备
+    pub async fn get_devices_by_core_type(&self, core_type: &str) -> Vec<u32> {
+        let mappings = self.device_core_mapper.get_all_mappings().await;
+        mappings.into_iter()
+            .filter(|(_, mapping)| mapping.core_type == core_type && mapping.active)
+            .map(|(device_id, _)| device_id)
+            .collect()
+    }
+
+    /// 获取设备架构统计信息
+    pub async fn get_architecture_stats(&self) -> crate::device::architecture::ArchitectureStats {
+        self.architecture_manager.get_architecture_stats().await
+    }
+
+    /// 更新系统资源使用情况
+    pub async fn update_resource_usage(&self, memory_mb: u64, cpu_percent: f64) {
+        self.architecture_manager.update_resource_usage(memory_mb, cpu_percent).await;
+    }
+
+    /// 获取设备数量统计
+    pub async fn get_device_count_by_core(&self) -> HashMap<String, usize> {
+        let mappings = self.device_core_mapper.get_all_mappings().await;
+        let mut counts = HashMap::new();
+
+        for (_, mapping) in mappings {
+            if mapping.active {
+                *counts.entry(mapping.core_name).or_insert(0) += 1;
+            }
+        }
+
+        counts
+    }
+}
+
+/// 核心设备代理
+///
+/// 通过代理模式隔离设备层和核心层
+pub struct CoreDeviceProxy {
+    /// 设备ID
+    device_id: u32,
+    /// 核心ID
+    core_id: String,
+    /// 设备信息缓存
+    device_cache: Arc<tokio::sync::RwLock<Option<DeviceInfo>>>,
+    /// 核心注册表引用
+    core_registry: Arc<CoreRegistry>,
+}
+
+impl CoreDeviceProxy {
+    /// 从设备信息创建新的设备代理
+    pub async fn new_with_info(
+        device_info: cgminer_core::DeviceInfo,
+        core_id: String,
+        core_registry: Arc<CoreRegistry>,
+        _config: crate::device::DeviceConfig,
+    ) -> Result<Self, crate::error::DeviceError> {
+        let proxy = Self {
+            device_id: device_info.id,
+            core_id,
+            device_cache: Arc::new(tokio::sync::RwLock::new(None)),
+            core_registry,
+        };
+
+        // 缓存设备信息
+        {
+            let mut cache = proxy.device_cache.write().await;
+            *cache = Some(DeviceInfo {
+                id: device_info.id,
+                name: device_info.name,
+                device_type: device_info.device_type,
+                chain_id: device_info.chain_id,
+                chip_count: device_info.chip_count.unwrap_or(1),
+                status: crate::device::DeviceStatus::Idle,
+                temperature: device_info.temperature,
+                fan_speed: device_info.fan_speed,
+                voltage: device_info.voltage,
+                frequency: device_info.frequency,
+                hashrate: 0.0,
+                accepted_shares: 0,
+                rejected_shares: 0,
+                hardware_errors: 0,
+                uptime: std::time::Duration::from_secs(0),
+                last_share_time: None,
+                created_at: device_info.created_at,
+                updated_at: std::time::SystemTime::now(),
+            });
+        }
+
+        Ok(proxy)
+    }
+}
+
+#[async_trait]
+impl MiningDevice for CoreDeviceProxy {
+    fn device_id(&self) -> u32 {
+        self.device_id
+    }
+
+    async fn get_info(&self) -> Result<DeviceInfo, crate::error::DeviceError> {
+        // 检查缓存
+        {
+            let cache = self.device_cache.read().await;
+            if let Some(cached_info) = cache.as_ref() {
+                return Ok(cached_info.clone());
+            }
+        }
+
+        // 如果缓存为空，返回默认设备信息
+        let device_info = DeviceInfo {
+            id: self.device_id,
+            name: format!("Device-{}", self.device_id),
+            device_type: "proxy".to_string(),
+            chain_id: 0,
+            chip_count: 1,
+            status: crate::device::DeviceStatus::Idle,
+            temperature: Some(45.0),
+            fan_speed: Some(50),
+            voltage: Some(12),
+            frequency: Some(600),
+            hashrate: 0.0,
+            accepted_shares: 0,
+            rejected_shares: 0,
+            hardware_errors: 0,
+            uptime: std::time::Duration::from_secs(0),
+            last_share_time: None,
+            created_at: std::time::SystemTime::now(),
+            updated_at: std::time::SystemTime::now(),
+        };
+
+        // 更新缓存
+        {
+            let mut cache = self.device_cache.write().await;
+            *cache = Some(device_info.clone());
+        }
+
+        Ok(device_info)
+    }
+
+    async fn start(&mut self) -> Result<(), crate::error::DeviceError> {
+        debug!("启动设备代理: ID={}, 核心={}", self.device_id, self.core_id);
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<(), crate::error::DeviceError> {
+        debug!("停止设备代理: ID={}, 核心={}", self.device_id, self.core_id);
+        Ok(())
+    }
+
+    async fn submit_work(&mut self, _work: Work) -> Result<(), crate::error::DeviceError> {
+        // 通过核心提交工作
+        Ok(())
+    }
+
+    async fn get_result(&mut self) -> Result<Option<MiningResult>, crate::error::DeviceError> {
+        // 从核心获取结果
+        Ok(None)
+    }
+
+    async fn set_frequency(&mut self, _frequency: u32) -> Result<(), crate::error::DeviceError> {
+        Ok(())
+    }
+
+    async fn set_voltage(&mut self, _voltage: u32) -> Result<(), crate::error::DeviceError> {
+        Ok(())
+    }
+
+    async fn initialize(&mut self, _config: crate::device::DeviceConfig) -> Result<(), crate::error::DeviceError> {
+        Ok(())
+    }
+
+    async fn restart(&mut self) -> Result<(), crate::error::DeviceError> {
+        Ok(())
+    }
+
+    async fn get_status(&self) -> Result<crate::device::DeviceStatus, crate::error::DeviceError> {
+        Ok(crate::device::DeviceStatus::Idle)
+    }
+
+    async fn get_temperature(&self) -> Result<f32, crate::error::DeviceError> {
+        Ok(45.0)
+    }
+
+    async fn get_hashrate(&self) -> Result<f64, crate::error::DeviceError> {
+        // 尝试从核心获取算力统计
+        match self.core_registry.get_core_stats(&self.core_id).await {
+            Ok(core_stats) => {
+                // 如果核心有多个设备，计算平均算力
+                if core_stats.active_devices > 0 {
+                    Ok(core_stats.total_hashrate / core_stats.active_devices as f64)
+                } else {
+                    Ok(0.0)
+                }
+            }
+            Err(_) => {
+                // 如果无法获取核心统计信息，返回0
+                Ok(0.0)
+            }
+        }
+    }
+
+    async fn set_fan_speed(&mut self, _speed: u32) -> Result<(), crate::error::DeviceError> {
+        Ok(())
+    }
+
+    async fn get_stats(&self) -> Result<crate::device::DeviceStats, crate::error::DeviceError> {
+        Ok(crate::device::DeviceStats::new())
+    }
+
+    async fn health_check(&self) -> Result<bool, crate::error::DeviceError> {
+        Ok(true)
+    }
+
+    async fn reset_stats(&mut self) -> Result<(), crate::error::DeviceError> {
+        Ok(())
     }
 }

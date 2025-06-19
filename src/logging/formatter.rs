@@ -82,8 +82,14 @@ where
     }
 }
 
-/// 格式化算力显示
+/// 格式化算力显示（改进的单位自动适配）
 pub fn format_hashrate(hashrate: f64) -> String {
+    // 处理特殊情况
+    if hashrate <= 0.0 {
+        return "0.00 H/s".to_string();
+    }
+
+    // 自动选择最合适的单位，避免显示过小的数值
     if hashrate >= 1_000_000_000_000.0 {
         format!("{:.2} TH/s", hashrate / 1_000_000_000_000.0)
     } else if hashrate >= 1_000_000_000.0 {
@@ -92,8 +98,11 @@ pub fn format_hashrate(hashrate: f64) -> String {
         format!("{:.2} MH/s", hashrate / 1_000_000.0)
     } else if hashrate >= 1_000.0 {
         format!("{:.2} KH/s", hashrate / 1_000.0)
-    } else {
+    } else if hashrate >= 1.0 {
         format!("{:.2} H/s", hashrate)
+    } else {
+        // 对于非常小的算力值，显示更高精度
+        format!("{:.6} H/s", hashrate)
     }
 }
 
@@ -244,4 +253,19 @@ pub fn create_table_row(columns: &[&str], widths: &[usize]) -> String {
 
     row.push_str("║");
     row
+}
+
+/// 格式化挖矿难度
+pub fn format_difficulty(difficulty: f64) -> String {
+    if difficulty >= 1_000_000_000_000.0 {
+        format!("🎯 {:.2}T", difficulty / 1_000_000_000_000.0)
+    } else if difficulty >= 1_000_000_000.0 {
+        format!("🎯 {:.2}G", difficulty / 1_000_000_000.0)
+    } else if difficulty >= 1_000_000.0 {
+        format!("🎯 {:.2}M", difficulty / 1_000_000.0)
+    } else if difficulty >= 1_000.0 {
+        format!("🎯 {:.2}K", difficulty / 1_000.0)
+    } else {
+        format!("🎯 {:.2}", difficulty)
+    }
 }

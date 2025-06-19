@@ -5,6 +5,7 @@ use crate::types::{Work, MiningResult, HashRate, Temperature, Voltage, Frequency
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, Instant};
+use tracing::{debug, trace};
 
 /// 设备信息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,6 +129,9 @@ pub struct RollingHashrateStats {
     /// 最后更新时间（跳过序列化）
     #[serde(skip, default = "Instant::now")]
     pub last_update: Instant,
+    /// 日志计数器（跳过序列化）
+    #[serde(skip)]
+    pub log_counter: u64,
 }
 
 impl Default for RollingHashrateStats {
@@ -137,6 +141,7 @@ impl Default for RollingHashrateStats {
             rolling_5m: 0.0,
             rolling_15m: 0.0,
             last_update: Instant::now(),
+            log_counter: 0,
         }
     }
 }
@@ -144,26 +149,57 @@ impl Default for RollingHashrateStats {
 impl RollingHashrateStats {
     /// 更新滑动窗口算力统计
     pub fn update(&mut self, hashes_done: u64, time_diff: f64) {
+        if time_diff <= 0.0 {
+            trace!("滑动窗口更新：时间差无效 ({:.6}s)，跳过更新", time_diff);
+            return;
+        }
+
+        self.log_counter += 1;
         let hashrate = hashes_done as f64 / time_diff;
 
-        // 使用指数衰减算法更新滑动窗口算力
+        // 每100次更新才输出一次日志，大幅减少日志输出
+        if self.log_counter % 100 == 0 {
+            debug!("滑动窗口更新：{} 哈希, {:.3}s, {:.2} H/s (第{}次更新)",
+                   hashes_done, time_diff, hashrate, self.log_counter);
+        }
+
+        // 使用改进的指数衰减算法更新滑动窗口算力
         Self::decay_time(&mut self.rolling_1m, hashrate, time_diff, 60.0);
         Self::decay_time(&mut self.rolling_5m, hashrate, time_diff, 300.0);
         Self::decay_time(&mut self.rolling_15m, hashrate, time_diff, 900.0);
 
+        // 每100次更新才输出一次算力统计日志
+        if self.log_counter % 100 == 0 {
+            debug!("滑动窗口算力：1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s",
+                   self.rolling_1m, self.rolling_5m, self.rolling_15m);
+        }
+
         self.last_update = Instant::now();
     }
 
-    /// 指数衰减算法（类似传统cgminer的decay_time函数）
+    /// 改进的指数衰减算法（类似传统cgminer的decay_time函数）
     fn decay_time(rolling: &mut f64, hashrate: f64, time_diff: f64, interval: f64) {
         if time_diff <= 0.0 {
             return;
         }
 
-        let fprop = 1.0 - 1.0 / (time_diff / interval).exp();
-        let ftotal = 1.0 + fprop;
-        *rolling += hashrate * fprop;
-        *rolling /= ftotal;
+        // 初始情况处理
+        if *rolling == 0.0 {
+            *rolling = hashrate;
+            return;
+        }
+
+        // 计算衰减因子，确保数值稳定性
+        let decay_factor = (-time_diff / interval).exp();
+        let weight = 1.0 - decay_factor;
+
+        // 更新滑动平均值
+        *rolling = *rolling * decay_factor + hashrate * weight;
+
+        // 确保结果为正数
+        if *rolling < 0.0 {
+            *rolling = 0.0;
+        }
     }
 }
 
@@ -206,6 +242,9 @@ pub struct DeviceStats {
     pub last_updated: SystemTime,
     /// 滑动窗口算力统计（内部使用）
     pub(crate) rolling_stats: RollingHashrateStats,
+    /// 算力更新计数器（跳过序列化）
+    #[serde(skip)]
+    pub(crate) hashrate_update_counter: u64,
 }
 
 impl DeviceStats {
@@ -230,6 +269,7 @@ impl DeviceStats {
             power_consumption: None,
             last_updated: SystemTime::now(),
             rolling_stats: RollingHashrateStats::default(),
+            hashrate_update_counter: 0,
         }
     }
 
@@ -255,27 +295,60 @@ impl DeviceStats {
 
     /// 更新算力统计（基于实际哈希次数）
     pub fn update_hashrate(&mut self, hashes_done: u64, time_diff: f64) {
-        // 更新总哈希次数
+        // 更新总哈希次数和计数器
         self.total_hashes += hashes_done;
+        self.hashrate_update_counter += 1;
+
+        // 确保时间差在合理范围内，避免除零或异常高的算力值
+        let min_time_diff = 0.001; // 最小1毫秒
+        let effective_time_diff = if time_diff < min_time_diff {
+            // 只在第一次或每1000次时输出时间差警告
+            if self.hashrate_update_counter == 1 || self.hashrate_update_counter % 1000 == 0 {
+                debug!("设备 {} 时间差过小 ({:.6}s)，使用最小值 {:.3}s",
+                       self.device_id, time_diff, min_time_diff);
+            }
+            min_time_diff
+        } else {
+            time_diff
+        };
 
         // 计算当前算力
-        if time_diff > 0.0 {
-            let current_hashrate = hashes_done as f64 / time_diff;
-            self.current_hashrate = HashRate::new(current_hashrate);
+        let current_hashrate = hashes_done as f64 / effective_time_diff;
+        self.current_hashrate = HashRate::new(current_hashrate);
 
-            // 更新滑动窗口算力统计
-            self.rolling_stats.update(hashes_done, time_diff);
+        // 每50次更新才输出一次算力更新日志
+        if self.hashrate_update_counter % 50 == 0 {
+            debug!("设备 {} 算力更新: {} 哈希, {:.3}s, {:.2} H/s (第{}次更新)",
+                   self.device_id, hashes_done, effective_time_diff, current_hashrate, self.hashrate_update_counter);
+        }
 
-            // 从滑动窗口统计中获取平均算力
-            self.hashrate_1m = HashRate::new(self.rolling_stats.rolling_1m);
-            self.hashrate_5m = HashRate::new(self.rolling_stats.rolling_5m);
-            self.hashrate_15m = HashRate::new(self.rolling_stats.rolling_15m);
+        // 更新滑动窗口算力统计
+        self.rolling_stats.update(hashes_done, effective_time_diff);
 
-            // 计算总体平均算力（简单移动平均）
-            let alpha = 0.1; // 平滑因子
-            let new_avg = self.average_hashrate.hashes_per_second * (1.0 - alpha) +
-                          current_hashrate * alpha;
-            self.average_hashrate = HashRate::new(new_avg);
+        // 从滑动窗口统计中获取平均算力
+        self.hashrate_1m = HashRate::new(self.rolling_stats.rolling_1m);
+        self.hashrate_5m = HashRate::new(self.rolling_stats.rolling_5m);
+        self.hashrate_15m = HashRate::new(self.rolling_stats.rolling_15m);
+
+        // 计算总体平均算力（指数移动平均）
+        let alpha = 0.1; // 平滑因子
+        let new_avg = if self.average_hashrate.hashes_per_second == 0.0 {
+            // 初始情况，直接使用当前算力
+            current_hashrate
+        } else {
+            self.average_hashrate.hashes_per_second * (1.0 - alpha) + current_hashrate * alpha
+        };
+        self.average_hashrate = HashRate::new(new_avg);
+
+        // 每50次更新才输出一次详细算力统计日志
+        if self.hashrate_update_counter % 50 == 0 {
+            debug!("设备 {} 算力统计: 当前={:.2} H/s, 1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s, 平均={:.2} H/s",
+                   self.device_id,
+                   current_hashrate,
+                   self.rolling_stats.rolling_1m,
+                   self.rolling_stats.rolling_5m,
+                   self.rolling_stats.rolling_15m,
+                   new_avg);
         }
 
         self.last_updated = SystemTime::now();

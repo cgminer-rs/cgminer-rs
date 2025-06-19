@@ -3,7 +3,9 @@ pub mod chain;
 pub mod traits;
 pub mod virtual_device;
 pub mod conversion;
-pub mod factory;
+// factory模块已整合到manager中
+pub mod device_core_mapper;
+pub mod architecture;
 
 #[cfg(test)]
 mod tests;
@@ -15,6 +17,7 @@ use uuid::Uuid;
 pub use manager::DeviceManager;
 pub use traits::ChainController;
 pub use traits::{MiningDevice, DeviceDriver};
+pub use device_core_mapper::{DeviceCoreMapper, DeviceCoreMapping, MappingStats};
 
 /// 设备状态枚举
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,45 +156,8 @@ impl DeviceInfo {
     }
 }
 
-/// 工作数据结构
-#[derive(Debug, Clone)]
-pub struct Work {
-    pub id: Uuid,
-    pub job_id: String,
-    pub target: [u8; 32],
-    pub header: [u8; 80],
-    #[allow(dead_code)]
-    pub midstate: [[u8; 32]; 8],
-    pub difficulty: f64,
-    pub created_at: SystemTime,
-    pub expires_at: SystemTime,
-}
-
-impl Work {
-    pub fn new(job_id: String, target: [u8; 32], header: [u8; 80], difficulty: f64) -> Self {
-        let now = SystemTime::now();
-        Self {
-            id: Uuid::new_v4(),
-            job_id,
-            target,
-            header,
-            midstate: [[0u8; 32]; 8],
-            difficulty,
-            created_at: now,
-            expires_at: now + Duration::from_secs(120), // 2分钟过期
-        }
-    }
-
-    pub fn is_expired(&self) -> bool {
-        SystemTime::now() > self.expires_at
-    }
-
-    #[allow(dead_code)]
-    pub fn time_to_expire(&self) -> Duration {
-        self.expires_at.duration_since(SystemTime::now())
-            .unwrap_or(Duration::from_secs(0))
-    }
-}
+// Work结构现在从cgminer-core导入
+pub use cgminer_core::types::Work;
 
 /// 挖矿结果结构
 #[derive(Debug, Clone, Serialize, Deserialize)]

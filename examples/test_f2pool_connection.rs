@@ -153,6 +153,7 @@ fn create_test_share() -> cgminer_rs::pool::Share {
         "test_job_001".to_string(), // job_id
         "12345678".to_string(), // extra_nonce2
         0x87654321, // nonce
+        0x5f5e100, // ntime (示例时间戳)
         1.0, // difficulty
     )
 }

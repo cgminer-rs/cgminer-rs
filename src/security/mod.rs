@@ -11,13 +11,11 @@
 // 简化安全模块（推荐使用）
 pub mod simple;
 
-// 保留原有复杂模块作为备份（可选启用）
-pub mod auth;
-pub mod crypto;
+// 保留基础配置模块
 pub mod config;
-pub mod audit;
 
 // 重新导出简化版本作为默认选择
+pub use simple::SimpleSecurityManager;
 
 
 use crate::error::MiningError;

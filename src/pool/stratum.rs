@@ -1,16 +1,17 @@
 use crate::error::PoolError;
 use crate::device::Work;
 use crate::pool::Share;
+use crate::logging::mining_logger::MiningLogger;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{RwLock, Mutex};
 use tokio::time::timeout;
-use tracing::{info, error, debug};
+use tracing::{info, error, debug, warn};
 
 /// Stratum 消息
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +59,10 @@ pub struct StratumClient {
     message_id: Arc<RwLock<u64>>,
     /// 待处理的请求
     pending_requests: Arc<RwLock<HashMap<u64, tokio::sync::oneshot::Sender<StratumMessage>>>>,
+    /// 矿池ID
+    pool_id: u32,
+    /// 挖矿日志记录器
+    mining_logger: Arc<MiningLogger>,
 }
 
 /// Stratum 作业
@@ -76,7 +81,7 @@ pub struct StratumJob {
 
 impl StratumClient {
     /// 创建新的 Stratum 客户端
-    pub async fn new(url: String, username: String, password: String) -> Result<Self, PoolError> {
+    pub async fn new(url: String, username: String, password: String, pool_id: u32, verbose: bool) -> Result<Self, PoolError> {
         Ok(Self {
             url,
             username,
@@ -91,47 +96,76 @@ impl StratumClient {
             current_job: Arc::new(RwLock::new(None)),
             message_id: Arc::new(RwLock::new(1)),
             pending_requests: Arc::new(RwLock::new(HashMap::new())),
+            pool_id,
+            mining_logger: Arc::new(MiningLogger::new(verbose)),
         })
     }
 
     /// 连接到矿池
     pub async fn connect(&mut self) -> Result<(), PoolError> {
         info!("Connecting to Stratum pool: {}", self.url);
+        debug!("🔗 [Pool {}] 开始连接到矿池: {}", self.pool_id, self.url);
 
         // 解析URL
         let url = self.url.strip_prefix("stratum+tcp://")
             .ok_or_else(|| PoolError::InvalidUrl { url: self.url.clone() })?;
 
+        debug!("🔗 [Pool {}] 解析后的连接地址: {}", self.pool_id, url);
+
         // 连接TCP
+        debug!("🔗 [Pool {}] 尝试建立TCP连接，超时时间: 10秒", self.pool_id);
         let stream = match timeout(Duration::from_secs(10), TcpStream::connect(url)).await {
-            Ok(Ok(stream)) => stream,
+            Ok(Ok(stream)) => {
+                debug!("🔗 [Pool {}] TCP连接建立成功", self.pool_id);
+                stream
+            },
             Ok(Err(e)) => {
+                debug!("🔗 [Pool {}] TCP连接失败: {}", self.pool_id, e);
+                self.mining_logger.log_pool_connection_change(
+                    self.pool_id,
+                    &self.url,
+                    false,
+                    Some(&e.to_string())
+                );
                 return Err(PoolError::ConnectionFailed {
                     url: self.url.clone(),
                     error: e.to_string(),
                 });
             }
             Err(_) => {
+                debug!("🔗 [Pool {}] TCP连接超时", self.pool_id);
+                self.mining_logger.log_pool_connection_change(
+                    self.pool_id,
+                    &self.url,
+                    false,
+                    Some("连接超时")
+                );
                 return Err(PoolError::Timeout { url: self.url.clone() });
             }
         };
 
         // 分离读写流
+        debug!("🔗 [Pool {}] 分离TCP流为读写流", self.pool_id);
         let (reader, writer) = stream.into_split();
         *self.reader.lock().await = Some(reader);
         *self.writer.lock().await = Some(writer);
         *self.connected.write().await = true;
 
         // 启动消息处理循环
+        debug!("🔗 [Pool {}] 启动消息处理循环", self.pool_id);
         self.start_message_loop().await?;
 
         // 发送订阅请求
+        debug!("🔗 [Pool {}] 发送订阅请求", self.pool_id);
         self.subscribe().await?;
 
         // 发送认证请求
+        debug!("🔗 [Pool {}] 发送认证请求", self.pool_id);
         self.authorize().await?;
 
+        self.mining_logger.log_pool_connection_change(self.pool_id, &self.url, true, None);
         info!("Successfully connected to Stratum pool");
+        debug!("🔗 [Pool {}] 完整连接流程完成", self.pool_id);
         Ok(())
     }
 
@@ -155,13 +189,14 @@ impl StratumClient {
         *self.current_job.write().await = None;
         self.pending_requests.write().await.clear();
 
+        self.mining_logger.log_pool_connection_change(self.pool_id, &self.url, false, Some("主动断开"));
         info!("Disconnected from Stratum pool");
         Ok(())
     }
 
     /// 订阅挖矿通知
     async fn subscribe(&self) -> Result<(), PoolError> {
-        debug!("Sending mining.subscribe");
+        debug!("📤 [Pool {}] 发送 mining.subscribe 请求", self.pool_id);
 
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
@@ -171,32 +206,108 @@ impl StratumClient {
             error: None,
         };
 
+        debug!("📤 [Pool {}] mining.subscribe 消息内容: {:?}", self.pool_id, message);
         let response = self.send_request(message).await?;
+
+        debug!("📥 [Pool {}] 收到 mining.subscribe 响应: {:?}", self.pool_id, response);
 
         if let Some(result) = response.result {
             if let Some(array) = result.as_array() {
-                if array.len() >= 2 {
-                    // 解析订阅响应
-                    if let Some(subscription_id) = array.get(1).and_then(|v| v.as_str()) {
-                        *self.subscription_id.write().await = Some(subscription_id.to_string());
-                    }
+                debug!("📥 [Pool {}] 响应数组长度: {}, 内容: {:?}", self.pool_id, array.len(), array);
 
-                    if array.len() >= 3 {
-                        if let Some(extra_nonce1) = array.get(2).and_then(|v| v.as_str()) {
-                            *self.extra_nonce1.write().await = Some(extra_nonce1.to_string());
-                        }
-                    }
-
-                    if array.len() >= 4 {
-                        if let Some(extra_nonce2_size) = array.get(3).and_then(|v| v.as_u64()) {
-                            *self.extra_nonce2_size.write().await = extra_nonce2_size as usize;
-                        }
-                    }
+                if array.len() < 2 {
+                    debug!("❌ [Pool {}] 响应数组长度不足: {} < 2", self.pool_id, array.len());
+                    return Err(PoolError::ProtocolError {
+                        url: self.url.clone(),
+                        error: format!("Invalid subscribe response: insufficient parameters (got {}, need at least 2)", array.len()),
+                    });
                 }
+
+                // 第一个元素通常是订阅信息数组，我们暂时跳过详细解析
+                if let Some(subscriptions) = array.get(0) {
+                    debug!("📥 [Pool {}] 订阅信息: {:?}", self.pool_id, subscriptions);
+                }
+
+                // 第二个元素是extranonce1
+                if let Some(extra_nonce1) = array.get(1).and_then(|v| v.as_str()) {
+                    debug!("📥 [Pool {}] 获取到 extranonce1: '{}'", self.pool_id, extra_nonce1);
+
+                    // 验证extranonce1格式
+                    if extra_nonce1.is_empty() {
+                        debug!("❌ [Pool {}] extranonce1 为空", self.pool_id);
+                        return Err(PoolError::ProtocolError {
+                            url: self.url.clone(),
+                            error: "Empty extranonce1".to_string(),
+                        });
+                    }
+
+                    // 验证是否为有效的十六进制字符串
+                    if hex::decode(extra_nonce1).is_err() {
+                        debug!("❌ [Pool {}] extranonce1 不是有效的十六进制: '{}'", self.pool_id, extra_nonce1);
+                        return Err(PoolError::ProtocolError {
+                            url: self.url.clone(),
+                            error: format!("Invalid extranonce1 format (not hex): '{}'", extra_nonce1),
+                        });
+                    }
+
+                    *self.extra_nonce1.write().await = Some(extra_nonce1.to_string());
+                    debug!("✅ [Pool {}] extranonce1 设置成功: {}", self.pool_id, extra_nonce1);
+                } else {
+                    debug!("❌ [Pool {}] 无法从响应中获取 extranonce1，第二个元素: {:?}", self.pool_id, array.get(1));
+                    return Err(PoolError::ProtocolError {
+                        url: self.url.clone(),
+                        error: "Missing or invalid extranonce1".to_string(),
+                    });
+                }
+
+                // 第三个元素是extranonce2_size
+                if array.len() >= 3 {
+                    if let Some(extra_nonce2_size) = array.get(2).and_then(|v| v.as_u64()) {
+                        debug!("📥 [Pool {}] 获取到 extranonce2_size: {}", self.pool_id, extra_nonce2_size);
+
+                        // 验证extranonce2_size的合理范围
+                        if extra_nonce2_size == 0 || extra_nonce2_size > 16 {
+                            debug!("❌ [Pool {}] extranonce2_size 超出合理范围: {} (应该在1-16之间)", self.pool_id, extra_nonce2_size);
+                            return Err(PoolError::ProtocolError {
+                                url: self.url.clone(),
+                                error: format!("Invalid extranonce2_size: {} (should be 1-16)", extra_nonce2_size),
+                            });
+                        }
+
+                        *self.extra_nonce2_size.write().await = extra_nonce2_size as usize;
+                        debug!("✅ [Pool {}] extranonce2_size 设置成功: {}", self.pool_id, extra_nonce2_size);
+                    } else {
+                        debug!("⚠️ [Pool {}] 无法获取 extranonce2_size，使用默认值 4，第三个元素: {:?}", self.pool_id, array.get(2));
+                        // 使用默认值而不是报错，因为有些矿池可能不提供这个参数
+                        *self.extra_nonce2_size.write().await = 4;
+                    }
+                } else {
+                    debug!("⚠️ [Pool {}] 响应中没有 extranonce2_size，使用默认值 4", self.pool_id);
+                    // 使用默认值
+                    *self.extra_nonce2_size.write().await = 4;
+                }
+            } else {
+                debug!("❌ [Pool {}] 响应结果不是数组格式: {:?}", self.pool_id, result);
+                return Err(PoolError::ProtocolError {
+                    url: self.url.clone(),
+                    error: "Invalid subscribe response format (result is not an array)".to_string(),
+                });
             }
+        } else if let Some(error) = response.error {
+            debug!("❌ [Pool {}] 订阅请求返回错误: 代码={}, 消息={}", self.pool_id, error.code, error.message);
+            return Err(PoolError::StratumError {
+                error_code: error.code,
+                message: error.message,
+            });
+        } else {
+            debug!("❌ [Pool {}] 响应中既没有结果也没有错误", self.pool_id);
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "No result or error in subscribe response".to_string(),
+            });
         }
 
-        debug!("Mining subscription successful");
+        debug!("✅ [Pool {}] 挖矿订阅成功完成", self.pool_id);
         Ok(())
     }
 
@@ -233,16 +344,43 @@ impl StratumClient {
 
     /// 提交份额
     pub async fn submit_share(&self, share: &Share) -> Result<bool, PoolError> {
-        debug!("Submitting share: nonce={:08x}", share.nonce);
+        // 记录份额提交详情
+        self.mining_logger.log_share_submit_details(
+            self.pool_id,
+            share.device_id,
+            &share.job_id,
+            share.nonce,
+            share.ntime,
+            &share.extra_nonce2,
+            share.difficulty,
+        );
 
+        debug!("Submitting share: job_id={}, nonce={:08x}, ntime={:08x}",
+               share.job_id, share.nonce, share.ntime);
+
+        // 验证份额数据完整性
+        // TODO: 重新启用验证 - DataValidator::validate_share(share)?;
+
+        // 确保extranonce2格式正确（应该已经是十六进制字符串）
+        let extranonce2_hex = if share.extra_nonce2.is_empty() {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Extranonce2 is empty".to_string(),
+            });
+        } else {
+            share.extra_nonce2.clone()
+        };
+
+        // 按照Stratum协议格式提交份额
+        // 参数顺序：[username, job_id, extranonce2, ntime, nonce]
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
             method: Some("mining.submit".to_string()),
             params: Some(json!([
                 self.username,
                 share.job_id,
-                share.extra_nonce2,
-                format!("{:08x}", share.timestamp.duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()),
+                extranonce2_hex,
+                format!("{:08x}", share.ntime),  // 使用工作数据中的ntime
                 format!("{:08x}", share.nonce)
             ])),
             result: None,
@@ -252,10 +390,46 @@ impl StratumClient {
         let response = self.send_request(message).await?;
 
         if let Some(result) = response.result {
-            Ok(result.as_bool().unwrap_or(false))
+            let accepted = result.as_bool().unwrap_or(false);
+
+            // 记录份额提交结果
+            self.mining_logger.log_share_result(
+                self.pool_id,
+                share.device_id,
+                accepted,
+                share.difficulty,
+                None,
+            );
+
+            if accepted {
+                debug!("Share accepted by pool");
+            } else {
+                debug!("Share rejected by pool");
+            }
+            Ok(accepted)
         } else if let Some(error) = response.error {
+            // 记录拒绝的份额
+            self.mining_logger.log_share_result(
+                self.pool_id,
+                share.device_id,
+                false,
+                share.difficulty,
+                Some(&error.message),
+            );
+
+            warn!("Share rejected: {}", error.message);
             Err(PoolError::ShareRejected { reason: error.message })
         } else {
+            // 记录未知响应
+            self.mining_logger.log_share_result(
+                self.pool_id,
+                share.device_id,
+                false,
+                share.difficulty,
+                Some("未知响应格式"),
+            );
+
+            warn!("Unknown response format for share submission");
             Ok(false)
         }
     }
@@ -278,52 +452,134 @@ impl StratumClient {
 
     /// 从作业构造工作
     fn build_work_from_job(&self, job: &StratumJob) -> Result<Work, PoolError> {
-        // 这里需要实现从 Stratum 作业到 Work 的转换
-        // 为了简化，我们创建一个基本的工作结构
-
-        let mut header = [0u8; 80];
-        let target = [0u8; 32];
-
-        // 解析版本
-        if let Ok(version_bytes) = hex::decode(&job.version) {
-            if version_bytes.len() >= 4 {
-                header[0..4].copy_from_slice(&version_bytes[0..4]);
-            }
-        }
-
-        // 解析前一个区块哈希
-        if let Ok(prev_hash_bytes) = hex::decode(&job.previous_hash) {
-            if prev_hash_bytes.len() >= 32 {
-                header[4..36].copy_from_slice(&prev_hash_bytes[0..32]);
-            }
-        }
-
-        // 解析时间
-        if let Ok(time_bytes) = hex::decode(&job.ntime) {
-            if time_bytes.len() >= 4 {
-                header[68..72].copy_from_slice(&time_bytes[0..4]);
-            }
-        }
-
-        // 解析难度目标
-        if let Ok(bits_bytes) = hex::decode(&job.nbits) {
-            if bits_bytes.len() >= 4 {
-                header[72..76].copy_from_slice(&bits_bytes[0..4]);
-            }
-        }
-
-        let difficulty = *tokio::task::block_in_place(|| {
+        // 验证extranonce配置
+        tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                self.difficulty.read().await
+                self.validate_extranonce_config().await
+            })
+        })?;
+
+        // 获取extranonce信息
+        let extranonce1 = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                self.extra_nonce1.read().await.clone()
+            })
+        }).ok_or_else(|| PoolError::ProtocolError {
+            url: self.url.clone(),
+            error: "Extranonce1 not available".to_string(),
+        })?;
+
+        let extranonce2_size = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                *self.extra_nonce2_size.read().await
             })
         });
 
-        Ok(Work::new(
+        if extranonce2_size == 0 {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Extranonce2 size not set".to_string(),
+            });
+        }
+
+        let difficulty = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                *self.difficulty.read().await
+            })
+        });
+
+        // 解析版本、nBits、nTime
+        let version = u32::from_str_radix(&job.version, 16)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid version format".to_string(),
+            })?;
+
+        let nbits = u32::from_str_radix(&job.nbits, 16)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid nBits format".to_string(),
+            })?;
+
+        let ntime = u32::from_str_radix(&job.ntime, 16)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid nTime format".to_string(),
+            })?;
+
+        // 解析coinbase和merkle分支
+        let coinbase1 = hex::decode(&job.coinbase1)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid coinbase1 format".to_string(),
+            })?;
+
+        let coinbase2 = hex::decode(&job.coinbase2)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid coinbase2 format".to_string(),
+            })?;
+
+        let merkle_branches: Result<Vec<Vec<u8>>, _> = job.merkle_branches
+            .iter()
+            .map(|branch| hex::decode(branch))
+            .collect();
+
+        let merkle_branches = merkle_branches
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid merkle branch format".to_string(),
+            })?;
+
+        // 解析extranonce1
+        let extranonce1_bytes = hex::decode(&extranonce1)
+            .map_err(|_| PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Invalid extranonce1 format".to_string(),
+            })?;
+
+        // 使用Work::from_stratum_job创建工作
+        let mut work = Work::from_stratum_job(
             job.job_id.clone(),
-            target,
-            header,
+            &job.previous_hash,
+            coinbase1,
+            coinbase2,
+            merkle_branches,
+            version,
+            nbits,
+            ntime,
+            extranonce1_bytes,
+            extranonce2_size,
             difficulty,
-        ))
+            job.clean_jobs,
+        ).map_err(|e| PoolError::ProtocolError {
+            url: self.url.clone(),
+            error: format!("Failed to create work from job: {}", e),
+        })?;
+
+        // 生成extranonce2并计算merkle root
+        let extranonce2 = self.generate_extranonce2(extranonce2_size);
+        work.set_extranonce2(extranonce2);
+
+        // 验证coinbase交易
+        work.validate_coinbase().map_err(|e| PoolError::ProtocolError {
+            url: self.url.clone(),
+            error: format!("Invalid coinbase transaction: {}", e),
+        })?;
+
+        // 计算merkle root
+        work.calculate_merkle_root().map_err(|e| PoolError::ProtocolError {
+            url: self.url.clone(),
+            error: format!("Failed to calculate merkle root: {}", e),
+        })?;
+
+        // 验证Work数据完整性
+        // TODO: 重新启用验证 - DataValidator::validate_work(&work).map_err(|e| PoolError::ProtocolError {
+        //     url: self.url.clone(),
+        //     error: format!("Work validation failed: {}", e),
+        // })?;
+
+        Ok(work)
     }
 
     /// 发送ping
@@ -368,39 +624,59 @@ impl StratumClient {
 
     /// 发送消息
     async fn send_message(&self, message: StratumMessage) -> Result<(), PoolError> {
+        debug!("📤 [Pool {}] 准备发送消息: {:?}", self.pool_id, message);
+
         let json_str = serde_json::to_string(&message)
-            .map_err(|e| PoolError::ProtocolError {
-                url: self.url.clone(),
-                error: format!("JSON serialization error: {}", e),
+            .map_err(|e| {
+                debug!("❌ [Pool {}] JSON序列化失败: {}", self.pool_id, e);
+                PoolError::ProtocolError {
+                    url: self.url.clone(),
+                    error: format!("JSON serialization error: {}", e),
+                }
             })?;
+
+        debug!("📤 [Pool {}] 发送JSON: {}", self.pool_id, json_str);
 
         let mut writer_guard = self.writer.lock().await;
         if let Some(writer) = writer_guard.as_mut() {
+            debug!("📤 [Pool {}] 写入JSON数据到TCP流", self.pool_id);
             writer.write_all(json_str.as_bytes()).await
-                .map_err(|e| PoolError::ConnectionFailed {
-                    url: self.url.clone(),
-                    error: e.to_string(),
+                .map_err(|e| {
+                    debug!("❌ [Pool {}] TCP写入JSON失败: {}", self.pool_id, e);
+                    PoolError::ConnectionFailed {
+                        url: self.url.clone(),
+                        error: e.to_string(),
+                    }
                 })?;
 
+            debug!("📤 [Pool {}] 写入换行符", self.pool_id);
             writer.write_all(b"\n").await
-                .map_err(|e| PoolError::ConnectionFailed {
-                    url: self.url.clone(),
-                    error: e.to_string(),
+                .map_err(|e| {
+                    debug!("❌ [Pool {}] TCP写入换行符失败: {}", self.pool_id, e);
+                    PoolError::ConnectionFailed {
+                        url: self.url.clone(),
+                        error: e.to_string(),
+                    }
                 })?;
 
+            debug!("📤 [Pool {}] 刷新TCP缓冲区", self.pool_id);
             writer.flush().await
-                .map_err(|e| PoolError::ConnectionFailed {
-                    url: self.url.clone(),
-                    error: e.to_string(),
+                .map_err(|e| {
+                    debug!("❌ [Pool {}] TCP刷新失败: {}", self.pool_id, e);
+                    PoolError::ConnectionFailed {
+                        url: self.url.clone(),
+                        error: e.to_string(),
+                    }
                 })?;
         } else {
+            debug!("❌ [Pool {}] 无法发送消息：TCP连接未建立", self.pool_id);
             return Err(PoolError::ConnectionFailed {
                 url: self.url.clone(),
                 error: "Not connected".to_string(),
             });
         }
 
-        debug!("Sent: {}", json_str);
+        debug!("✅ [Pool {}] 消息发送完成: {}", self.pool_id, json_str);
         Ok(())
     }
 
@@ -411,6 +687,8 @@ impl StratumClient {
         let pending_requests = self.pending_requests.clone();
         let current_job = self.current_job.clone();
         let difficulty = self.difficulty.clone();
+        let mining_logger = self.mining_logger.clone();
+        let pool_id = self.pool_id;
 
         tokio::spawn(async move {
             // 获取读取流
@@ -427,27 +705,46 @@ impl StratumClient {
                     line.clear();
 
                     match buf_reader.read_line(&mut line).await {
-                        Ok(0) => break, // EOF
-                        Ok(_) => {
+                        Ok(0) => {
+                            debug!("📥 [Pool {}] TCP连接已关闭 (EOF)", pool_id);
+                            break; // EOF
+                        },
+                        Ok(bytes_read) => {
+                            debug!("📥 [Pool {}] 接收到 {} 字节数据: {}", pool_id, bytes_read, line.trim());
                             if let Ok(message) = serde_json::from_str::<StratumMessage>(&line.trim()) {
-                                debug!("Received: {}", line.trim());
+                                debug!("📥 [Pool {}] 解析消息成功: {:?}", pool_id, message);
 
                                 // 处理响应
                                 if let Some(id) = message.id {
+                                    debug!("📥 [Pool {}] 处理响应消息，ID: {}", pool_id, id);
                                     let mut pending = pending_requests.write().await;
                                     if let Some(tx) = pending.remove(&id) {
+                                        debug!("📥 [Pool {}] 找到对应的待处理请求，发送响应", pool_id);
                                         let _ = tx.send(message);
                                         continue;
+                                    } else {
+                                        debug!("⚠️ [Pool {}] 未找到ID为 {} 的待处理请求", pool_id, id);
                                     }
                                 }
 
                                 // 处理通知
                                 if let Some(method) = &message.method {
+                                    debug!("📥 [Pool {}] 处理通知消息，方法: {}", pool_id, method);
                                     match method.as_str() {
                                         "mining.notify" => {
                                             // 处理新作业通知
                                             if let Some(params) = &message.params {
                                                 if let Some(job) = Self::parse_job_notification(params) {
+                                                    // 记录新工作接收
+                                                    let current_difficulty = *difficulty.read().await;
+                                                    mining_logger.log_work_received(
+                                                        pool_id,
+                                                        &job.job_id,
+                                                        &job.previous_hash,
+                                                        job.clean_jobs,
+                                                        current_difficulty,
+                                                    );
+
                                                     *current_job.write().await = Some(job);
                                                 }
                                             }
@@ -457,19 +754,47 @@ impl StratumClient {
                                             if let Some(params) = &message.params {
                                                 if let Some(array) = params.as_array() {
                                                     if let Some(diff) = array.get(0).and_then(|v| v.as_f64()) {
-                                                        *difficulty.write().await = diff;
+                                                        // 验证难度值的合理性
+                                                        if diff > 0.0 && diff.is_finite() {
+                                                            let old_difficulty = *difficulty.read().await;
+                                                            *difficulty.write().await = diff;
+
+                                                            // 记录难度变化
+                                                            if old_difficulty != diff {
+                                                                mining_logger.log_difficulty_change(
+                                                                    pool_id,
+                                                                    old_difficulty,
+                                                                    diff,
+                                                                );
+                                                            }
+
+                                                            debug!("Difficulty updated to: {}", diff);
+                                                        } else {
+                                                            warn!("Invalid difficulty value received: {}", diff);
+                                                        }
+                                                    } else {
+                                                        warn!("Failed to parse difficulty from mining.set_difficulty");
                                                     }
+                                                } else {
+                                                    warn!("Invalid parameters format for mining.set_difficulty");
                                                 }
+                                            } else {
+                                                warn!("No parameters in mining.set_difficulty message");
                                             }
                                         }
                                         _ => {
-                                            debug!("Unknown method: {}", method);
+                                            debug!("📥 [Pool {}] 未知方法: {}", pool_id, method);
                                         }
                                     }
+                                } else {
+                                    debug!("📥 [Pool {}] 收到无方法的消息: {:?}", pool_id, message);
                                 }
+                            } else {
+                                debug!("❌ [Pool {}] JSON解析失败: {}", pool_id, line.trim());
                             }
                         }
                         Err(e) => {
+                            debug!("❌ [Pool {}] TCP读取错误: {}", pool_id, e);
                             error!("Error reading from stream: {}", e);
                             break;
                         }
@@ -511,5 +836,97 @@ impl StratumClient {
         let mut id = self.message_id.write().await;
         *id += 1;
         *id
+    }
+
+    /// 生成extranonce2
+    fn generate_extranonce2(&self, size: usize) -> Vec<u8> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        (0..size).map(|_| rng.gen::<u8>()).collect()
+    }
+
+    /// 检查extranonce是否已正确设置
+    pub async fn is_extranonce_ready(&self) -> bool {
+        let extranonce1 = self.extra_nonce1.read().await;
+        let extranonce2_size = *self.extra_nonce2_size.read().await;
+
+        extranonce1.is_some() && extranonce2_size > 0
+    }
+
+    /// 获取extranonce信息
+    pub async fn get_extranonce_info(&self) -> (Option<String>, usize) {
+        let extranonce1 = self.extra_nonce1.read().await.clone();
+        let extranonce2_size = *self.extra_nonce2_size.read().await;
+
+        (extranonce1, extranonce2_size)
+    }
+
+    /// 验证extranonce配置
+    pub async fn validate_extranonce_config(&self) -> Result<(), PoolError> {
+        let (extranonce1, extranonce2_size) = self.get_extranonce_info().await;
+
+        // 检查extranonce1
+        if let Some(ref en1) = extranonce1 {
+            if en1.is_empty() {
+                return Err(PoolError::ProtocolError {
+                    url: self.url.clone(),
+                    error: "Extranonce1 is empty".to_string(),
+                });
+            }
+
+            // 验证十六进制格式
+            if hex::decode(en1).is_err() {
+                return Err(PoolError::ProtocolError {
+                    url: self.url.clone(),
+                    error: "Extranonce1 is not valid hex".to_string(),
+                });
+            }
+        } else {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Extranonce1 not set".to_string(),
+            });
+        }
+
+        // 检查extranonce2_size
+        if extranonce2_size == 0 {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: "Extranonce2 size not set".to_string(),
+            });
+        }
+
+        if extranonce2_size > 16 {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: format!("Extranonce2 size too large: {}", extranonce2_size),
+            });
+        }
+
+        Ok(())
+    }
+
+    /// 获取当前难度
+    pub async fn get_current_difficulty(&self) -> f64 {
+        *self.difficulty.read().await
+    }
+
+    /// 验证难度值是否有效
+    pub fn is_valid_difficulty(difficulty: f64) -> bool {
+        difficulty > 0.0 && difficulty.is_finite() && difficulty <= 1e12
+    }
+
+    /// 设置难度值（带验证）
+    pub async fn set_difficulty(&self, difficulty: f64) -> Result<(), PoolError> {
+        if !Self::is_valid_difficulty(difficulty) {
+            return Err(PoolError::ProtocolError {
+                url: self.url.clone(),
+                error: format!("Invalid difficulty value: {}", difficulty),
+            });
+        }
+
+        *self.difficulty.write().await = difficulty;
+        debug!("Difficulty set to: {}", difficulty);
+        Ok(())
     }
 }
