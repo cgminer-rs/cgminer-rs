@@ -52,17 +52,32 @@ default_core = "btc-software"
 # - 支持CPU绑定，避免线程切换提升性能
 [cores.btc_software]
 enabled = true
-device_count = 32            # 增加软算法设备数量以提高总算力
-min_hashrate = 2000000000.0  # 最小算力: 2 GH/s
-max_hashrate = 8000000000.0  # 最大算力: 8 GH/s (高性能CPU挖矿)
-error_rate = 0.002           # 错误率: 0.2% (更低的错误率)
-batch_size = 4000            # 增大批处理大小提高效率
-work_timeout_ms = 2000       # 减少工作超时提高响应速度
+# 🎯 CPU使用率优化配置 - 目标80%CPU使用率
+# 设备数量 = CPU逻辑核心数 * 0.8 (80%使用率)
+# 对于8核16线程系统: 16 * 0.8 = 12-13个设备
+# 对于4核8线程系统: 8 * 0.8 = 6-7个设备
+# 建议根据实际CPU核心数调整，公式: CPU逻辑核心数 * 0.8
+device_count = 64            # 优化设备数量以达到80%CPU使用率
+min_hashrate = 3000000000.0  # 最小算力: 1.5 GH/s (适中配置)
+max_hashrate = 12000000000.0  # 最大算力: 4 GH/s (平衡性能与稳定性)
+error_rate = 0.001           # 错误率: 0.1% (更低错误率提升效率)
+batch_size = 15000            # 增大批处理大小提高CPU利用率
+work_timeout_ms = 1500       # 减少工作超时提高响应速度
+# 性能优化参数
+thread_priority = "high"     # 线程优先级: "normal", "high", "realtime"
+cpu_intensive_mode = true    # 启用CPU密集模式，最大化CPU使用
+# Mac M4 优化配置
+enable_cpu_affinity = false  # macOS限制CPU绑定
 
-# CPU绑定配置 - 提升挖矿性能和稳定性
+# CPU绑定配置 - 智能CPU分配策略
 [cores.btc_software.cpu_affinity]
 enabled = true               # 启用CPU绑定
-strategy = "round_robin"     # CPU绑定策略: "round_robin", "manual", "performance_first", "physical_only"
+strategy = "intelligent"     # 智能CPU绑定策略，自动优化分配
+avoid_hyperthreading = false # 使用超线程提高并发性能
+prefer_performance_cores = true # 优先使用性能核心(适用于大小核架构)
+# 高级CPU优化选项
+load_balancing = true        # 启用负载均衡
+cpu_usage_target = 0.8       # 目标CPU使用率 80%
 # manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
 
 # Maijie L7 ASIC核心配置 (cgminer-a-maijie-l7-core)
@@ -221,7 +236,3 @@ console_output = true
 
 # 启用美化输出 - 使用emoji和颜色，符合CGMiner-RS的美化日志风格
 beautiful_output = true
-
-# 算力单位 - 支持 H, KH, MH, GH, TH
-# 对于软算法核心，推荐使用 GH (千兆哈希/秒)
-hashrate_unit = "GH"

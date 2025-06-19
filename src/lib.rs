@@ -14,6 +14,7 @@ pub mod monitoring;
 pub mod performance;
 pub mod pool;
 pub mod security;
+pub mod utils;
 pub mod validation;
 pub mod web;
 

@@ -46,4 +46,7 @@ mockall = "0.12"
 
 [lib]
 name = "cgminer_s_btc_core"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]  # 只生成rlib，避免LTO冲突
+
+# 如果需要动态库，可以单独构建
+# crate-type = ["cdylib", "rlib"]

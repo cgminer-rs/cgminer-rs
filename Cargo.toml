@@ -79,6 +79,9 @@ base64 = "0.21"
 libloading = { version = "0.8", optional = true }
 num_cpus = "1.17.0"
 
+# System monitoring
+sysinfo = "0.30"
+
 # Web server for Prometheus metrics
 warp = "0.3"
 
@@ -110,14 +113,46 @@ path = "src/main.rs"
 name = "test-stratum-connection"
 path = "src/bin/test_stratum_connection.rs"
 
+# 发布版本优化配置
 [profile.release]
-lto = true
+# 链接时优化 - 提高性能
+lto = "fat"
+# 单个代码生成单元 - 最大化优化
 codegen-units = 1
+# 崩溃时直接终止 - 减少二进制大小
 panic = "abort"
+# 最高优化级别
+opt-level = 3
+# 启用调试信息用于性能分析
+debug = 1
+# 去除未使用的代码
+strip = "symbols"
+# 溢出检查（挖矿程序需要数值稳定性）
+overflow-checks = false
 
+# 开发版本配置
 [profile.dev]
 debug = true
-opt-level = 0
+opt-level = 1
+# 开发时保留溢出检查
+overflow-checks = true
+# 增量编译加速开发
+incremental = true
+
+# 性能测试优化配置
+[profile.bench]
+inherits = "release"
+debug = true
+lto = "thin"
+
+# 测试配置
+[profile.test]
+opt-level = 1
+debug = true
+overflow-checks = true
+
+# 注意：平台特定的编译优化已移至 .cargo/config.toml
+# 这里的 cfg() 语法在 Cargo.toml 中不被支持，需要使用具体的目标三元组
 
 [features]
 default = ["btc-software"]

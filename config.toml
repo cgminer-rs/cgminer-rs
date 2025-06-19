@@ -28,20 +28,21 @@ enabled_cores = ["software"]
 # 默认核心
 default_core = "software"
 
-# 软算法核心配置
+# 软算法核心配置 - Mac M4 优化
 [cores.software_core]
 enabled = true
-device_count = 4             # 默认设备数量
-min_hashrate = 500000000.0   # 最小算力: 500 MH/s
-max_hashrate = 2000000000.0  # 最大算力: 2 GH/s
-error_rate = 0.005           # 错误率: 0.5%
-batch_size = 2000            # 批处理大小
-work_timeout_ms = 3000       # 工作超时: 3秒
+device_count = 64            # Mac M4优化: 您已配置的设备数量
+min_hashrate = 2000000000.0  # 最小算力: 2 GH/s
+max_hashrate = 8000000000.0  # 最大算力: 8 GH/s (Mac M4优化)
+error_rate = 0.002           # 错误率: 0.2% (降低错误率)
+batch_size = 12000           # 批处理大小: 12000 (Mac M4大批处理优化)
+work_timeout_ms = 1500       # 工作超时: 1.5秒 (更快响应)
 
-# CPU绑定配置
+# CPU绑定配置 - Mac M4 优化
 [cores.software_core.cpu_affinity]
-enabled = true               # 启用CPU绑定
-strategy = "round_robin"     # 绑定策略
+enabled = false              # Mac M4: 禁用CPU绑定，依赖系统调度
+strategy = "intelligent"     # 智能策略
+prefer_performance_cores = true  # 优先使用性能核心
 
 # ASIC核心配置 (默认禁用)
 [cores.asic_core]

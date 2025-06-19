@@ -48,7 +48,7 @@ impl PoolManager {
             let pool = Pool::new(
                 pool_id,
                 pool_info.url.clone(),
-                pool_info.user.clone(),
+                pool_info.username.clone(),
                 pool_info.password.clone(),
                 pool_info.priority,
                 pool_info.enabled,
@@ -57,7 +57,7 @@ impl PoolManager {
             // 创建 Stratum 客户端
             let stratum_client = StratumClient::new(
                 pool_info.url.clone(),
-                pool_info.user.clone(),
+                pool_info.username.clone(),
                 pool_info.password.clone(),
                 pool_id,
                 false, // 默认不启用详细日志

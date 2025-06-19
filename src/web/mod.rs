@@ -21,7 +21,10 @@ pub struct WebConfig {
     /// 是否启用
     pub enabled: bool,
     /// 静态文件路径
+    #[serde(alias = "static_files_dir")]
     pub static_path: Option<String>,
+    /// 模板目录路径
+    pub template_dir: Option<String>,
 }
 
 impl Default for WebConfig {
@@ -31,6 +34,7 @@ impl Default for WebConfig {
             port: 8080,
             enabled: true,
             static_path: Some("web/static".to_string()),
+            template_dir: Some("web/templates".to_string()),
         }
     }
 }

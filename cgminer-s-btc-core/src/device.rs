@@ -5,6 +5,7 @@ use cgminer_core::{
     Work, MiningResult, DeviceError, Temperature, Voltage, Frequency
 };
 use crate::cpu_affinity::CpuAffinityManager;
+use crate::platform_optimization;
 use async_trait::async_trait;
 use sha2::{Sha256, Digest};
 use std::sync::{Arc, RwLock};
@@ -160,8 +161,8 @@ impl SoftwareDevice {
                 break; // 找到解后退出循环
             }
 
-            // 每执行一定数量的哈希后让出CPU时间
-            if hashes_done % 1000 == 0 {
+            // 使用平台特定的CPU让出策略优化
+            if hashes_done % platform_optimization::get_platform_yield_frequency() == 0 {
                 tokio::task::yield_now().await;
             }
         }

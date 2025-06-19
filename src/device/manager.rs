@@ -13,6 +13,7 @@ use tokio::sync::{RwLock, Mutex};
 use tokio::time::interval;
 use tracing::{info, warn, error, debug};
 use async_trait::async_trait;
+use crate::logging::formatter::format_hashrate;
 
 /// 设备算力详情
 #[derive(Debug, Clone)]
@@ -652,16 +653,16 @@ impl DeviceManager {
             return;
         }
 
-        // 输出总体统计
-        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {:.2} H/s | 平均: {:.2} H/s",
+        // 输出总体统计（使用自适应单位）
+        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {} | 平均: {}",
               active_devices,
-              total_current,
-              total_current / active_devices as f64);
+              format_hashrate(total_current),
+              format_hashrate(total_current / active_devices as f64));
 
-        // 输出设备详情（分组显示，每行最多5个设备）
+        // 输出设备详情（分组显示，每行最多5个设备，使用自适应单位）
         for chunk in device_details.chunks(5) {
             let device_info_str: Vec<String> = chunk.iter().map(|(device_id, hashrate, temp)| {
-                format!("设备{}: {:.0}H/s ({:.1}°C)", device_id, hashrate, temp)
+                format!("设备{}: {} ({:.1}°C)", device_id, format_hashrate(*hashrate), temp)
             }).collect();
 
             debug!("   📱 {}", device_info_str.join(" | "));
@@ -852,16 +853,16 @@ impl DeviceManager {
             return;
         }
 
-        // 输出总体统计
-        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {:.2} H/s | 平均: {:.2} H/s",
+        // 输出总体统计（使用自适应单位）
+        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {} | 平均: {}",
               stats.active_devices,
-              stats.total_current_hashrate,
-              stats.total_avg_hashrate / stats.active_devices as f64);
+              format_hashrate(stats.total_current_hashrate),
+              format_hashrate(stats.total_avg_hashrate / stats.active_devices as f64));
 
-        // 输出设备详情（分组显示，每行最多5个设备）
+        // 输出设备详情（分组显示，每行最多5个设备，使用自适应单位）
         for chunk in stats.device_details.chunks(5) {
             let device_info: Vec<String> = chunk.iter().map(|d| {
-                format!("设备{}: {:.0}H/s", d.device_id, d.current_hashrate)
+                format!("设备{}: {}", d.device_id, format_hashrate(d.current_hashrate))
             }).collect();
 
             debug!("   📱 {}", device_info.join(" | "));

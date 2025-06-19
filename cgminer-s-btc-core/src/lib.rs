@@ -8,6 +8,7 @@ pub mod device;
 pub mod factory;
 pub mod cpu_affinity;
 pub mod performance;
+pub mod platform_optimization;
 
 // 重新导出主要类型
 pub use core::SoftwareMiningCore;

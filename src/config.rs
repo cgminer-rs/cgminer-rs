@@ -39,6 +39,9 @@ pub struct Config {
     pub monitoring: MonitoringConfig,
     pub web: WebConfig,
     pub hashmeter: HashmeterConfig,
+    pub performance: Option<PerformanceConfig>,
+    pub limits: Option<LimitsConfig>,
+    pub logging: Option<LoggingConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,10 +78,14 @@ pub struct BtcSoftwareCoreConfig {
 pub struct CpuAffinityConfig {
     /// 是否启用CPU绑定
     pub enabled: bool,
-    /// 绑定策略: "round_robin", "manual", "performance_first", "physical_only"
+    /// 绑定策略: "round_robin", "manual", "performance_first", "physical_only", "intelligent"
     pub strategy: String,
     /// 手动核心映射 (设备ID -> CPU核心索引)
     pub manual_mapping: Option<std::collections::HashMap<u32, usize>>,
+    /// 是否避免超线程
+    pub avoid_hyperthreading: Option<bool>,
+    /// 是否优先使用性能核心
+    pub prefer_performance_cores: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -128,8 +135,10 @@ pub enum PoolStrategy {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolInfo {
+    pub name: Option<String>,
     pub url: String,
-    pub user: String,
+    #[serde(alias = "user")]
+    pub username: String,
     pub password: String,
     pub priority: u8,
     pub quota: Option<u32>,
@@ -167,6 +176,126 @@ pub struct AlertThresholds {
     pub min_hashrate: f64,
 }
 
+/// 性能优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceConfig {
+    /// 算力优化配置
+    pub hashrate_optimization: Option<HashrateOptimizationConfig>,
+    /// 内存优化配置
+    pub memory_optimization: Option<MemoryOptimizationConfig>,
+    /// 线程优化配置
+    pub thread_optimization: Option<ThreadOptimizationConfig>,
+    /// 批处理优化配置
+    pub batch_optimization: Option<BatchOptimizationConfig>,
+    /// 网络优化配置
+    pub network_optimization: Option<NetworkOptimizationConfig>,
+}
+
+/// 算力优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HashrateOptimizationConfig {
+    /// 基础算力 (H/s)
+    pub base_hashrate: f64,
+    /// 算力变化范围 (0.0-1.0)
+    pub hashrate_variance: f64,
+    /// 频率-算力因子
+    pub frequency_hashrate_factor: f64,
+    /// 电压-算力因子
+    pub voltage_hashrate_factor: f64,
+    /// 温度影响因子
+    pub temperature_impact_factor: f64,
+    /// 自适应调整
+    pub adaptive_adjustment: bool,
+}
+
+/// 内存优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryOptimizationConfig {
+    /// 工作缓存大小
+    pub work_cache_size: u32,
+    /// 结果缓存大小
+    pub result_cache_size: u32,
+    /// 统计保留时间 (秒)
+    pub stats_retention_seconds: u64,
+    /// 启用内存池
+    pub enable_memory_pool: bool,
+    /// 预分配内存 (MB)
+    pub preallocated_memory_mb: u32,
+}
+
+/// 线程优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadOptimizationConfig {
+    /// 每设备工作线程数
+    pub worker_threads_per_device: u32,
+    /// 线程优先级
+    pub thread_priority: String,
+    /// 线程栈大小 (KB)
+    pub thread_stack_size_kb: u32,
+    /// 启用线程池
+    pub enable_thread_pool: bool,
+}
+
+/// 批处理优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchOptimizationConfig {
+    /// 默认批次大小
+    pub default_batch_size: u32,
+    /// 最小批次大小
+    pub min_batch_size: u32,
+    /// 最大批次大小
+    pub max_batch_size: u32,
+    /// 自适应批次大小
+    pub adaptive_batch_size: bool,
+    /// 批次超时 (毫秒)
+    pub batch_timeout_ms: u64,
+}
+
+/// 网络优化配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkOptimizationConfig {
+    /// 连接池大小
+    pub connection_pool_size: u32,
+    /// 请求超时 (毫秒)
+    pub request_timeout_ms: u64,
+    /// 最大并发请求数
+    pub max_concurrent_requests: u32,
+    /// 保活间隔 (秒)
+    pub keepalive_interval: u64,
+}
+
+/// 系统资源限制配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimitsConfig {
+    /// 最大内存使用 (MB)
+    pub max_memory_mb: u64,
+    /// 最大CPU使用率 (%)
+    pub max_cpu_percent: f64,
+    /// 最大打开文件数
+    pub max_open_files: u32,
+    /// 最大网络连接数
+    pub max_network_connections: u32,
+}
+
+/// 日志配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoggingConfig {
+    /// 日志级别
+    pub level: String,
+    /// 日志文件路径
+    pub file: String,
+    /// 最大文件大小
+    pub max_size: String,
+    /// 最大文件数量
+    pub max_files: u32,
+    /// 控制台输出
+    pub console: bool,
+    /// JSON格式
+    pub json_format: bool,
+    /// 日志轮转
+    pub rotation: String,
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -192,6 +321,8 @@ impl Default for Config {
                         enabled: true,
                         strategy: "round_robin".to_string(),
                         manual_mapping: None,
+                        avoid_hyperthreading: Some(false),
+                        prefer_performance_cores: Some(true),
                     }),
                 }),
                 maijie_l7: Some(MaijieL7CoreConfig {
@@ -232,8 +363,9 @@ impl Default for Config {
                 retry_interval: 10,
                 pools: vec![
                     PoolInfo {
+                        name: Some("example-pool".to_string()),
                         url: "stratum+tcp://pool.example.com:4444".to_string(),
-                        user: "username".to_string(),
+                        username: "username".to_string(),
                         password: "password".to_string(),
                         priority: 1,
                         quota: None,
@@ -267,6 +399,9 @@ impl Default for Config {
             },
             web: WebConfig::default(),
             hashmeter: HashmeterConfig::default(),
+            performance: None,
+            limits: None,
+            logging: None,
         }
     }
 }

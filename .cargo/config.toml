@@ -1,0 +1,158 @@
+# Cargo 构建配置文件
+# 针对不同平台的编译优化设置
+
+[build]
+# 默认使用所有CPU核心进行并行编译
+jobs = 0
+
+# 平台特定的编译器标志
+[target.aarch64-apple-darwin]
+# Mac M4 (Apple Silicon) 专用优化
+rustflags = [
+    # 使用原生CPU特性
+    "-C", "target-cpu=apple-m1",
+    # 启用硬件加速特性
+    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+sha3,+crc",
+    # 最高优化级别
+    "-C", "opt-level=3",
+    # 单个代码生成单元以获得最佳优化
+    "-C", "codegen-units=1",
+    # 启用链接时优化
+    "-C", "lto=fat",
+    # 启用机器码优化
+    "-C", "llvm-args=-enable-machine-outliner=never",
+    "-C", "llvm-args=-enable-gvn-hoist",
+    "-C", "llvm-args=-enable-load-pre=true",
+    # 针对挖矿算法的数学优化
+    "-C", "llvm-args=-enable-unsafe-fp-math",
+    "-C", "llvm-args=-fast-math",
+    # 内存访问优化
+    "-C", "llvm-args=-enable-aa-sched-mi",
+    # 分支预测优化
+    "-C", "llvm-args=-enable-misched",
+]
+
+[target.x86_64-apple-darwin]
+# Intel Mac 优化
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2",
+    "-C", "opt-level=3",
+    "-C", "codegen-units=1",
+    "-C", "lto=fat",
+]
+
+[target.x86_64-unknown-linux-gnu]
+# Linux x86_64 优化
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2,+fma",
+    "-C", "opt-level=3",
+    "-C", "codegen-units=1",
+    "-C", "lto=fat",
+    # Linux 特定优化
+    "-C", "llvm-args=-enable-load-pre=true",
+    "-C", "llvm-args=-enable-gvn-hoist",
+]
+
+[target.aarch64-unknown-linux-gnu]
+# ARM64 Linux 优化
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+crc",
+    "-C", "opt-level=3",
+    "-C", "codegen-units=1",
+    "-C", "lto=fat",
+]
+
+[target.x86_64-pc-windows-msvc]
+# Windows x86_64 优化
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2",
+    "-C", "opt-level=3",
+    "-C", "codegen-units=1",
+    "-C", "lto=fat",
+]
+
+# 环境变量设置
+[env]
+# 启用 LLVM 优化
+RUSTFLAGS = { value = "-C prefer-dynamic=no", force = false }
+# 启用并行编译
+CARGO_BUILD_JOBS = { value = "0", force = false }
+
+# 别名定义
+[alias]
+# 快速构建（开发用）
+quick = "build --profile dev"
+# 性能构建（发布用）
+perf = "build --release"
+# Mac M4 专用构建
+m4-build = "build --release --target aarch64-apple-darwin"
+# 基准测试构建
+bench-build = "build --profile bench"
+# 清理并重新构建
+rebuild = ["clean", "build --release"]
+# 运行所有测试
+test-all = "test --all-features --release"
+# 性能分析构建
+profile-build = "build --release --features=profiling"
+
+# 注册表配置
+[registries]
+# 使用国内镜像加速依赖下载（可选）
+# crates-io = { index = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git" }
+
+# 网络配置
+[net]
+# 重试次数
+retry = 3
+# 超时设置
+timeout = 30000
+
+# HTTP 配置
+[http]
+# 启用多路复用
+multiplexing = true
+# 用户代理
+user-agent = "cgminer-rs-build"
+
+# 源码替换（可选，用于加速国内构建）
+# [source.crates-io]
+# replace-with = "tuna"
+#
+# [source.tuna]
+# registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
+
+# 构建缓存配置
+[profile.dev.build-override]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 1
+
+# 包特定优化
+[profile.dev.package.sha2]
+opt-level = 3
+
+[profile.dev.package.aes-gcm]
+opt-level = 3
+
+[profile.dev.package.tokio]
+opt-level = 2
+
+# 发布版本包优化
+[profile.release.package.sha2]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.aes-gcm]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.serde]
+opt-level = 3
+codegen-units = 1

@@ -236,7 +236,7 @@ fn print_config_summary(config: &Config) {
     info!("   🏊 Mining Pools: {} configured", pool_count);
     if pool_count > 0 {
         info!("   📡 Primary Pool: {}", config.pools.pools[0].url);
-        info!("   👤 Worker: {}", config.pools.pools[0].user);
+        info!("   👤 Worker: {}", config.pools.pools[0].username);
     }
 
     // 显示API信息

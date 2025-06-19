@@ -237,24 +237,23 @@ fn get_git_branch() -> Option<String> {
         })
 }
 
-/// 设置编译特性
+/// 设置编译特性和平台优化
 fn setup_compile_features(target_os: &str, target_arch: &str) {
+    println!("cargo:warning=🔧 Setting up compile features for {}-{}", target_os, target_arch);
+
     // 根据目标平台启用特性
     match target_os {
         "linux" => {
             println!("cargo:rustc-cfg=target_os_linux");
-
-            // 检查是否支持硬件特性
-            if target_arch == "x86_64" {
-                println!("cargo:rustc-cfg=feature=\"sse2\"");
-                println!("cargo:rustc-cfg=feature=\"avx2\"");
-            }
+            configure_linux_optimizations(target_arch);
         }
         "macos" => {
             println!("cargo:rustc-cfg=target_os_macos");
+            configure_macos_optimizations(target_arch);
         }
         "windows" => {
             println!("cargo:rustc-cfg=target_os_windows");
+            configure_windows_optimizations(target_arch);
         }
         _ => {}
     }
@@ -263,21 +262,219 @@ fn setup_compile_features(target_os: &str, target_arch: &str) {
     match target_arch {
         "x86_64" => {
             println!("cargo:rustc-cfg=target_arch_x86_64");
+            configure_x86_64_features();
         }
         "aarch64" => {
             println!("cargo:rustc-cfg=target_arch_aarch64");
+            configure_aarch64_features(target_os);
         }
         "armv7" => {
             println!("cargo:rustc-cfg=target_arch_armv7");
+            configure_armv7_features();
         }
         _ => {}
     }
 
     // 检查是否为调试构建
-    if env::var("PROFILE").unwrap() == "debug" {
+    let profile = env::var("PROFILE").unwrap();
+    if profile == "debug" {
         println!("cargo:rustc-cfg=debug_build");
     } else {
         println!("cargo:rustc-cfg=release_build");
+        configure_release_optimizations(target_os, target_arch);
+    }
+
+    // 设置挖矿特定的优化特性
+    configure_mining_optimizations(target_os, target_arch);
+}
+
+/// 配置Linux平台优化
+fn configure_linux_optimizations(target_arch: &str) {
+    println!("cargo:warning=🐧 Configuring Linux optimizations");
+
+    // 启用Linux特定特性
+    println!("cargo:rustc-cfg=has_epoll");
+    println!("cargo:rustc-cfg=has_sendfile");
+    println!("cargo:rustc-cfg=has_splice");
+
+    // 根据架构配置
+    match target_arch {
+        "x86_64" => {
+            println!("cargo:rustc-cfg=linux_x86_64");
+            println!("cargo:rustc-link-arg=-Wl,--gc-sections");
+            println!("cargo:rustc-link-arg=-Wl,--strip-all");
+        }
+        "aarch64" => {
+            println!("cargo:rustc-cfg=linux_aarch64");
+            println!("cargo:rustc-cfg=has_neon");
+            println!("cargo:rustc-link-arg=-Wl,--gc-sections");
+        }
+        _ => {}
+    }
+}
+
+/// 配置macOS平台优化
+fn configure_macos_optimizations(target_arch: &str) {
+    println!("cargo:warning=🍎 Configuring macOS optimizations");
+
+    // 启用macOS特定特性
+    println!("cargo:rustc-cfg=has_kqueue");
+    println!("cargo:rustc-cfg=has_grand_central_dispatch");
+
+    // 设置macOS链接器优化
+    println!("cargo:rustc-link-arg=-Wl,-dead_strip");
+    println!("cargo:rustc-link-arg=-Wl,-x");
+
+    match target_arch {
+        "aarch64" => {
+            println!("cargo:warning=🚀 Mac M4 (Apple Silicon) detected!");
+            println!("cargo:rustc-cfg=apple_silicon");
+            println!("cargo:rustc-cfg=has_neon");
+            println!("cargo:rustc-cfg=has_crypto");
+            println!("cargo:rustc-cfg=has_aes_hardware");
+            println!("cargo:rustc-cfg=has_sha_hardware");
+
+            // Apple Silicon 特定链接优化
+            println!("cargo:rustc-link-arg=-Wl,-platform_version,macos,11.0,11.0");
+
+            // 设置部署目标
+            println!("cargo:rustc-env=MACOSX_DEPLOYMENT_TARGET=11.0");
+        }
+        "x86_64" => {
+            println!("cargo:rustc-cfg=intel_mac");
+            println!("cargo:rustc-cfg=has_aes_ni");
+            println!("cargo:rustc-cfg=has_sha_ext");
+        }
+        _ => {}
+    }
+}
+
+/// 配置Windows平台优化
+fn configure_windows_optimizations(target_arch: &str) {
+    println!("cargo:warning=🪟 Configuring Windows optimizations");
+
+    // 启用Windows特定特性
+    println!("cargo:rustc-cfg=has_iocp");
+    println!("cargo:rustc-cfg=has_overlapped_io");
+
+    match target_arch {
+        "x86_64" => {
+            println!("cargo:rustc-cfg=windows_x86_64");
+            // Windows链接器优化
+            println!("cargo:rustc-link-arg=/OPT:REF");
+            println!("cargo:rustc-link-arg=/OPT:ICF");
+        }
+        _ => {}
+    }
+}
+
+/// 配置x86_64架构特性
+fn configure_x86_64_features() {
+    println!("cargo:warning=💻 Configuring x86_64 features");
+
+    // 启用x86_64硬件特性
+    println!("cargo:rustc-cfg=has_sse");
+    println!("cargo:rustc-cfg=has_sse2");
+    println!("cargo:rustc-cfg=has_sse4_1");
+    println!("cargo:rustc-cfg=has_sse4_2");
+    println!("cargo:rustc-cfg=has_avx");
+    println!("cargo:rustc-cfg=has_avx2");
+    println!("cargo:rustc-cfg=has_aes_ni");
+    println!("cargo:rustc-cfg=has_sha_ext");
+    println!("cargo:rustc-cfg=has_bmi2");
+    println!("cargo:rustc-cfg=has_fma");
+}
+
+/// 配置aarch64架构特性
+fn configure_aarch64_features(target_os: &str) {
+    println!("cargo:warning=🦾 Configuring ARM64 features");
+
+    // 启用ARM64硬件特性
+    println!("cargo:rustc-cfg=has_neon");
+    println!("cargo:rustc-cfg=has_crypto_ext");
+    println!("cargo:rustc-cfg=has_aes_hardware");
+    println!("cargo:rustc-cfg=has_sha_hardware");
+    println!("cargo:rustc-cfg=has_crc32");
+
+    if target_os == "macos" {
+        // Apple Silicon 特有特性
+        println!("cargo:rustc-cfg=apple_silicon");
+        println!("cargo:rustc-cfg=has_apple_crypto");
+        println!("cargo:rustc-cfg=has_apple_amx");  // Apple Matrix coprocessor
+    }
+}
+
+/// 配置ARMv7架构特性
+fn configure_armv7_features() {
+    println!("cargo:warning=🦾 Configuring ARMv7 features");
+
+    println!("cargo:rustc-cfg=has_neon_optional");
+    println!("cargo:rustc-cfg=has_thumb2");
+}
+
+/// 配置发布版本优化
+fn configure_release_optimizations(target_os: &str, target_arch: &str) {
+    println!("cargo:warning=🚀 Configuring release optimizations");
+
+    // 启用发布版本特定优化
+    println!("cargo:rustc-cfg=optimized_build");
+    println!("cargo:rustc-cfg=fast_math");
+
+    // 平台特定的发布优化
+    match (target_os, target_arch) {
+        ("macos", "aarch64") => {
+            println!("cargo:rustc-cfg=apple_silicon_optimized");
+        }
+        ("linux", "x86_64") => {
+            println!("cargo:rustc-cfg=linux_x86_64_optimized");
+        }
+        _ => {}
+    }
+}
+
+/// 配置挖矿特定优化
+fn configure_mining_optimizations(target_os: &str, target_arch: &str) {
+    println!("cargo:warning=⛏️  Configuring mining-specific optimizations");
+
+    // 启用挖矿算法优化
+    println!("cargo:rustc-cfg=sha256_optimized");
+    println!("cargo:rustc-cfg=double_sha256_optimized");
+    println!("cargo:rustc-cfg=mining_optimized");
+
+    // 根据平台启用特定的挖矿优化
+    match (target_os, target_arch) {
+        ("macos", "aarch64") => {
+            println!("cargo:rustc-cfg=apple_silicon_mining");
+            println!("cargo:rustc-cfg=neon_sha256");
+            println!("cargo:rustc-cfg=crypto_ext_sha256");
+        }
+        ("linux", "x86_64") => {
+            println!("cargo:rustc-cfg=x86_64_mining");
+            println!("cargo:rustc-cfg=aes_ni_mining");
+            println!("cargo:rustc-cfg=sha_ext_mining");
+        }
+        ("linux", "aarch64") => {
+            println!("cargo:rustc-cfg=aarch64_linux_mining");
+            println!("cargo:rustc-cfg=neon_mining");
+        }
+        _ => {}
+    }
+
+    // 启用CPU绑定特性（如果平台支持）
+    match target_os {
+        "linux" => {
+            println!("cargo:rustc-cfg=has_cpu_affinity");
+            println!("cargo:rustc-cfg=has_sched_setaffinity");
+        }
+        "macos" => {
+            // macOS 对CPU绑定支持有限
+            println!("cargo:rustc-cfg=limited_cpu_affinity");
+        }
+        "windows" => {
+            println!("cargo:rustc-cfg=has_cpu_affinity");
+            println!("cargo:rustc-cfg=has_set_thread_affinity_mask");
+        }
+        _ => {}
     }
 }
 

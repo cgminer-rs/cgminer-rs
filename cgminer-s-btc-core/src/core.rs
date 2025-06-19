@@ -7,6 +7,7 @@ use cgminer_core::{
 use crate::device::SoftwareDevice;
 use crate::performance::PerformanceOptimizer;
 use crate::cpu_affinity::{CpuAffinityManager, CpuAffinityStrategy};
+use crate::platform_optimization::PlatformOptimization;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -308,6 +309,10 @@ impl MiningCore for SoftwareMiningCore {
     async fn initialize(&mut self, config: CoreConfig) -> Result<(), CoreError> {
         info!("开始初始化软算法挖矿核心: {}", config.name);
         debug!("配置参数: {:?}", config.custom_params);
+
+        // 打印平台优化信息
+        let platform_config = PlatformOptimization::get_current_platform_config();
+        platform_config.print_optimization_info();
 
         // 验证配置
         debug!("验证配置...");

@@ -21,7 +21,8 @@ pub struct HashmeterConfig {
     pub console_output: bool,
     /// 是否启用美化输出
     pub beautiful_output: bool,
-    /// 算力单位 (H, KH, MH, GH, TH)
+    /// 算力单位 (自动适应，无需配置)
+    #[serde(skip)]
     pub hashrate_unit: String,
 }
 
@@ -33,7 +34,7 @@ impl Default for HashmeterConfig {
             per_device_stats: true,
             console_output: true,
             beautiful_output: true,
-            hashrate_unit: "GH".to_string(),
+            hashrate_unit: "AUTO".to_string(),
         }
     }
 }
@@ -303,118 +304,13 @@ impl Hashmeter {
         }
     }
 
-    /// 格式化算力显示（智能单位处理，自动降级到合适单位）
-    fn format_hashrate(hashrate: f64, unit: &str) -> String {
-        // 处理特殊情况
-        if hashrate <= 0.0 {
-            return format!("0.00 {}/s", unit);
-        }
-
-        match unit {
-            "H" => {
-                if hashrate >= 100.0 {
-                    format!("{:.1} H/s", hashrate)
-                } else if hashrate >= 10.0 {
-                    format!("{:.2} H/s", hashrate)
-                } else if hashrate >= 1.0 {
-                    format!("{:.3} H/s", hashrate)
-                } else {
-                    format!("{:.6} H/s", hashrate)
-                }
-            },
-            "KH" => {
-                let kh_value = hashrate / 1_000.0;
-                if kh_value >= 1.0 {
-                    if kh_value >= 100.0 {
-                        format!("{:.1} KH/s", kh_value)
-                    } else if kh_value >= 10.0 {
-                        format!("{:.2} KH/s", kh_value)
-                    } else {
-                        format!("{:.3} KH/s", kh_value)
-                    }
-                } else {
-                    // 降级到H/s
-                    if hashrate >= 100.0 {
-                        format!("{:.1} H/s", hashrate)
-                    } else if hashrate >= 10.0 {
-                        format!("{:.2} H/s", hashrate)
-                    } else {
-                        format!("{:.3} H/s", hashrate)
-                    }
-                }
-            },
-            "MH" => {
-                let mh_value = hashrate / 1_000_000.0;
-                if mh_value >= 1.0 {
-                    if mh_value >= 100.0 {
-                        format!("{:.1} MH/s", mh_value)
-                    } else if mh_value >= 10.0 {
-                        format!("{:.2} MH/s", mh_value)
-                    } else {
-                        format!("{:.3} MH/s", mh_value)
-                    }
-                } else {
-                    // 降级到KH/s
-                    let kh_value = hashrate / 1_000.0;
-                    if kh_value >= 100.0 {
-                        format!("{:.1} KH/s", kh_value)
-                    } else if kh_value >= 10.0 {
-                        format!("{:.2} KH/s", kh_value)
-                    } else {
-                        format!("{:.3} KH/s", kh_value)
-                    }
-                }
-            },
-            "GH" => {
-                let gh_value = hashrate / 1_000_000_000.0;
-                if gh_value >= 1.0 {
-                    if gh_value >= 100.0 {
-                        format!("{:.1} GH/s", gh_value)
-                    } else if gh_value >= 10.0 {
-                        format!("{:.2} GH/s", gh_value)
-                    } else {
-                        format!("{:.3} GH/s", gh_value)
-                    }
-                } else {
-                    // 降级到MH/s
-                    let mh_value = hashrate / 1_000_000.0;
-                    if mh_value >= 100.0 {
-                        format!("{:.1} MH/s", mh_value)
-                    } else if mh_value >= 10.0 {
-                        format!("{:.2} MH/s", mh_value)
-                    } else {
-                        format!("{:.3} MH/s", mh_value)
-                    }
-                }
-            },
-            "TH" => {
-                let th_value = hashrate / 1_000_000_000_000.0;
-                if th_value >= 1.0 {
-                    if th_value >= 100.0 {
-                        format!("{:.1} TH/s", th_value)
-                    } else if th_value >= 10.0 {
-                        format!("{:.2} TH/s", th_value)
-                    } else {
-                        format!("{:.3} TH/s", th_value)
-                    }
-                } else {
-                    // 降级到GH/s
-                    let gh_value = hashrate / 1_000_000_000.0;
-                    if gh_value >= 100.0 {
-                        format!("{:.1} GH/s", gh_value)
-                    } else if gh_value >= 10.0 {
-                        format!("{:.2} GH/s", gh_value)
-                    } else {
-                        format!("{:.3} GH/s", gh_value)
-                    }
-                }
-            },
-            _ => {
-                // 默认使用自动单位选择
-                Self::format_hashrate_auto(hashrate)
-            }
-        }
+    /// 格式化算力显示（智能单位自适应）
+    fn format_hashrate(hashrate: f64, _unit: &str) -> String {
+        // 始终使用自动单位选择，忽略配置的单位
+        Self::format_hashrate_auto(hashrate)
     }
+
+
 
     /// 自动选择最合适的单位进行格式化（智能单位适配）
     fn format_hashrate_auto(hashrate: f64) -> String {
@@ -526,5 +422,38 @@ impl Hashmeter {
         } else {
             0.0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hashrate_auto_formatting() {
+        // 测试自动单位选择 - 现在所有单位都会自动选择
+        assert_eq!(Hashmeter::format_hashrate(7_399_000.0, ""), "7.399 MH/s");
+        assert_eq!(Hashmeter::format_hashrate(7_399_000_000.0, ""), "7.399 GH/s");
+        assert_eq!(Hashmeter::format_hashrate(7_399.0, ""), "7.399 KH/s");
+        assert_eq!(Hashmeter::format_hashrate(7.399, ""), "7.399 H/s");
+
+        // 测试边界情况
+        assert_eq!(Hashmeter::format_hashrate(999_999_999.0, ""), "1000.0 MH/s");
+        assert_eq!(Hashmeter::format_hashrate(1_000_000_000.0, ""), "1.000 GH/s");
+
+        // 测试零值
+        assert_eq!(Hashmeter::format_hashrate(0.0, ""), "0.00 H/s");
+
+        // 测试小数值
+        assert_eq!(Hashmeter::format_hashrate(0.007399, ""), "0.007399 H/s");
+    }
+
+    #[test]
+    fn test_hashrate_unit_independence() {
+        // 测试单位参数被忽略，都使用自动选择
+        assert_eq!(Hashmeter::format_hashrate(7_399_000.0, "GH"), "7.399 MH/s");
+        assert_eq!(Hashmeter::format_hashrate(7_399_000.0, "KH"), "7.399 MH/s");
+        assert_eq!(Hashmeter::format_hashrate(7_399_000.0, "TH"), "7.399 MH/s");
+        assert_eq!(Hashmeter::format_hashrate(7_399_000.0, "INVALID"), "7.399 MH/s");
     }
 }
