@@ -14,6 +14,44 @@ use tokio::time::interval;
 use tracing::{info, warn, error, debug};
 use async_trait::async_trait;
 
+/// 设备算力详情
+#[derive(Debug, Clone)]
+pub struct DeviceHashrateDetail {
+    /// 设备ID
+    pub device_id: u32,
+    /// 当前算力
+    pub current_hashrate: f64,
+    /// 1分钟平均算力
+    pub avg_1m: f64,
+    /// 5分钟平均算力
+    pub avg_5m: f64,
+    /// 15分钟平均算力
+    pub avg_15m: f64,
+    /// 温度
+    pub temperature: f32,
+}
+
+/// 聚合算力统计信息
+#[derive(Debug, Clone)]
+pub struct AggregatedHashrateStats {
+    /// 总当前算力
+    pub total_current_hashrate: f64,
+    /// 总1分钟算力
+    pub total_1m_hashrate: f64,
+    /// 总5分钟算力
+    pub total_5m_hashrate: f64,
+    /// 总15分钟算力
+    pub total_15m_hashrate: f64,
+    /// 总平均算力
+    pub total_avg_hashrate: f64,
+    /// 活跃设备数
+    pub active_devices: u32,
+    /// 设备详情列表
+    pub device_details: Vec<DeviceHashrateDetail>,
+    /// 统计时间戳
+    pub timestamp: std::time::SystemTime,
+}
+
 /// 设备管理器（集成设备工厂功能）
 pub struct DeviceManager {
     /// 设备列表
@@ -516,11 +554,15 @@ impl DeviceManager {
         let running = self.running.clone();
         let scan_interval = Duration::from_secs(self.config.scan_interval);
 
+
+
         let handle = tokio::spawn(async move {
             let mut interval = interval(scan_interval);
+            let mut aggregated_stats_counter = 0u32;
 
             while *running.read().await {
                 interval.tick().await;
+                aggregated_stats_counter += 1;
 
                 // 更新设备状态和统计信息
                 let devices = devices.read().await;
@@ -557,11 +599,73 @@ impl DeviceManager {
                         }
                     }
                 }
+
+                // 每3个监控周期输出一次聚合算力统计（用于测试）
+                if aggregated_stats_counter % 3 == 0 {
+                    // 创建临时的聚合统计输出
+                    Self::log_aggregated_stats_static(&device_stats, &device_info).await;
+                }
             }
         });
 
         self.monitoring_handle = Some(handle);
         Ok(())
+    }
+
+    /// 静态方法用于在监控任务中输出聚合统计
+    async fn log_aggregated_stats_static(
+        device_stats: &Arc<RwLock<HashMap<u32, DeviceStats>>>,
+        device_info: &Arc<RwLock<HashMap<u32, DeviceInfo>>>,
+    ) {
+        let device_stats = device_stats.read().await;
+        let device_info = device_info.read().await;
+
+        let mut total_current = 0.0;
+        let mut active_devices = 0;
+        let mut device_details = Vec::new();
+
+        for (device_id, info) in device_info.iter() {
+            if info.is_healthy() {
+                active_devices += 1;
+
+                // 优先使用设备统计信息中的算力
+                let device_hashrate = if let Some(stats) = device_stats.get(device_id) {
+                    if let Some(avg_hashrate) = stats.get_average_hashrate() {
+                        avg_hashrate
+                    } else {
+                        // 如果没有算力历史，使用设备信息中的算力
+                        info.hashrate
+                    }
+                } else {
+                    // 如果没有统计信息，使用设备信息中的算力
+                    info.hashrate
+                };
+
+                total_current += device_hashrate;
+                device_details.push((*device_id, device_hashrate, info.temperature.unwrap_or(0.0)));
+            }
+        }
+
+        if active_devices == 0 {
+            // 即使没有活跃设备，也输出一条信息表明监控正在运行
+            debug!("📊 算力统计汇总 | 活跃设备: 0 | 监控系统正在运行");
+            return;
+        }
+
+        // 输出总体统计
+        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {:.2} H/s | 平均: {:.2} H/s",
+              active_devices,
+              total_current,
+              total_current / active_devices as f64);
+
+        // 输出设备详情（分组显示，每行最多5个设备）
+        for chunk in device_details.chunks(5) {
+            let device_info_str: Vec<String> = chunk.iter().map(|(device_id, hashrate, temp)| {
+                format!("设备{}: {:.0}H/s ({:.1}°C)", device_id, hashrate, temp)
+            }).collect();
+
+            debug!("   📱 {}", device_info_str.join(" | "));
+        }
     }
 
 
@@ -692,6 +796,76 @@ impl DeviceManager {
         }
 
         total_hashrate
+    }
+
+    /// 获取聚合算力统计信息
+    pub async fn get_aggregated_hashrate_stats(&self) -> AggregatedHashrateStats {
+        let device_stats = self.device_stats.read().await;
+        let device_info = self.device_info.read().await;
+
+        let mut total_current = 0.0;
+        let total_1m = 0.0;
+        let total_5m = 0.0;
+        let total_15m = 0.0;
+        let mut total_avg = 0.0;
+        let mut active_devices = 0;
+        let mut device_details = Vec::new();
+
+        for (device_id, info) in device_info.iter() {
+            if info.is_healthy() {
+                if let Some(stats) = device_stats.get(device_id) {
+                    if let Some(avg_hashrate) = stats.get_average_hashrate() {
+                        total_current += avg_hashrate;
+                        total_avg += avg_hashrate;
+                        active_devices += 1;
+
+                        device_details.push(DeviceHashrateDetail {
+                            device_id: *device_id,
+                            current_hashrate: avg_hashrate,
+                            avg_1m: avg_hashrate, // 简化处理，实际应该从stats获取
+                            avg_5m: avg_hashrate,
+                            avg_15m: avg_hashrate,
+                            temperature: info.temperature.unwrap_or(0.0),
+                        });
+                    }
+                }
+            }
+        }
+
+        AggregatedHashrateStats {
+            total_current_hashrate: total_current,
+            total_1m_hashrate: total_1m,
+            total_5m_hashrate: total_5m,
+            total_15m_hashrate: total_15m,
+            total_avg_hashrate: total_avg,
+            active_devices,
+            device_details,
+            timestamp: std::time::SystemTime::now(),
+        }
+    }
+
+    /// 输出聚合算力统计日志
+    pub async fn log_aggregated_hashrate_stats(&self) {
+        let stats = self.get_aggregated_hashrate_stats().await;
+
+        if stats.active_devices == 0 {
+            return;
+        }
+
+        // 输出总体统计
+        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {:.2} H/s | 平均: {:.2} H/s",
+              stats.active_devices,
+              stats.total_current_hashrate,
+              stats.total_avg_hashrate / stats.active_devices as f64);
+
+        // 输出设备详情（分组显示，每行最多5个设备）
+        for chunk in stats.device_details.chunks(5) {
+            let device_info: Vec<String> = chunk.iter().map(|d| {
+                format!("设备{}: {:.0}H/s", d.device_id, d.current_hashrate)
+            }).collect();
+
+            debug!("   📱 {}", device_info.join(" | "));
+        }
     }
 
     /// 获取设备的核心映射信息
@@ -919,7 +1093,34 @@ impl MiningDevice for CoreDeviceProxy {
     }
 
     async fn get_stats(&self) -> Result<crate::device::DeviceStats, crate::error::DeviceError> {
-        Ok(crate::device::DeviceStats::new())
+        // 尝试从核心获取真实的统计数据
+        match self.core_registry.get_core_stats(&self.core_id).await {
+            Ok(core_stats) => {
+                let mut device_stats = crate::device::DeviceStats::new();
+
+                // 如果核心有多个设备，计算平均算力
+                let device_hashrate = if core_stats.active_devices > 0 {
+                    core_stats.total_hashrate / core_stats.active_devices as f64
+                } else {
+                    0.0
+                };
+
+                // 记录算力历史
+                device_stats.record_hashrate(device_hashrate);
+
+                // 设置其他统计信息（使用正确的字段名和类型转换）
+                let active_devices = core_stats.active_devices.max(1) as u64;
+                device_stats.valid_nonces = core_stats.accepted_work / active_devices;
+                device_stats.invalid_nonces = core_stats.rejected_work / active_devices;
+                device_stats.hardware_errors = core_stats.hardware_errors / active_devices;
+
+                Ok(device_stats)
+            }
+            Err(_) => {
+                // 如果无法获取核心统计信息，返回默认统计
+                Ok(crate::device::DeviceStats::new())
+            }
+        }
     }
 
     async fn health_check(&self) -> Result<bool, crate::error::DeviceError> {

@@ -157,8 +157,8 @@ impl RollingHashrateStats {
         self.log_counter += 1;
         let hashrate = hashes_done as f64 / time_diff;
 
-        // 每100次更新才输出一次日志，大幅减少日志输出
-        if self.log_counter % 100 == 0 {
+        // 每1000次更新才输出一次日志，进一步减少日志输出
+        if self.log_counter % 1000 == 0 {
             debug!("滑动窗口更新：{} 哈希, {:.3}s, {:.2} H/s (第{}次更新)",
                    hashes_done, time_diff, hashrate, self.log_counter);
         }
@@ -168,11 +168,12 @@ impl RollingHashrateStats {
         Self::decay_time(&mut self.rolling_5m, hashrate, time_diff, 300.0);
         Self::decay_time(&mut self.rolling_15m, hashrate, time_diff, 900.0);
 
-        // 每100次更新才输出一次算力统计日志
-        if self.log_counter % 100 == 0 {
-            debug!("滑动窗口算力：1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s",
-                   self.rolling_1m, self.rolling_5m, self.rolling_15m);
-        }
+        // 完全禁用滑动窗口算力日志，改为使用聚合显示
+        // 如果需要调试，可以临时启用以下代码：
+        // if self.log_counter % 2000 == 0 {
+        //     debug!("滑动窗口算力：1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s",
+        //            self.rolling_1m, self.rolling_5m, self.rolling_15m);
+        // }
 
         self.last_update = Instant::now();
     }
@@ -316,8 +317,8 @@ impl DeviceStats {
         let current_hashrate = hashes_done as f64 / effective_time_diff;
         self.current_hashrate = HashRate::new(current_hashrate);
 
-        // 每50次更新才输出一次算力更新日志
-        if self.hashrate_update_counter % 50 == 0 {
+        // 每500次更新才输出一次算力更新日志（大幅减少输出）
+        if self.hashrate_update_counter % 500 == 0 {
             debug!("设备 {} 算力更新: {} 哈希, {:.3}s, {:.2} H/s (第{}次更新)",
                    self.device_id, hashes_done, effective_time_diff, current_hashrate, self.hashrate_update_counter);
         }
@@ -340,16 +341,17 @@ impl DeviceStats {
         };
         self.average_hashrate = HashRate::new(new_avg);
 
-        // 每50次更新才输出一次详细算力统计日志
-        if self.hashrate_update_counter % 50 == 0 {
-            debug!("设备 {} 算力统计: 当前={:.2} H/s, 1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s, 平均={:.2} H/s",
-                   self.device_id,
-                   current_hashrate,
-                   self.rolling_stats.rolling_1m,
-                   self.rolling_stats.rolling_5m,
-                   self.rolling_stats.rolling_15m,
-                   new_avg);
-        }
+        // 完全禁用单个设备的详细算力统计日志，改为使用聚合显示
+        // 如果需要调试单个设备，可以临时启用以下代码：
+        // if self.hashrate_update_counter % 1000 == 0 {
+        //     debug!("设备 {} 算力统计: 当前={:.2} H/s, 1m={:.2} H/s, 5m={:.2} H/s, 15m={:.2} H/s, 平均={:.2} H/s",
+        //            self.device_id,
+        //            current_hashrate,
+        //            self.rolling_stats.rolling_1m,
+        //            self.rolling_stats.rolling_5m,
+        //            self.rolling_stats.rolling_15m,
+        //            new_avg);
+        // }
 
         self.last_updated = SystemTime::now();
     }

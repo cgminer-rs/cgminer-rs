@@ -143,23 +143,88 @@ async fn test_edge_cases() {
     println!("    0 哈希: {:.2} H/s", stats.current_hashrate.hashes_per_second);
 }
 
-/// 自动选择最合适的单位进行格式化
+/// 自动选择最合适的单位进行格式化（智能单位适配）
 fn format_hashrate_auto(hashrate: f64) -> String {
     if hashrate <= 0.0 {
         return "0.00 H/s".to_string();
     }
 
+    // 智能选择最合适的单位，确保显示值在合理范围内（1-999）
     if hashrate >= 1_000_000_000_000.0 {
-        format!("{:.2} TH/s", hashrate / 1_000_000_000_000.0)
+        let th_value = hashrate / 1_000_000_000_000.0;
+        if th_value >= 100.0 {
+            format!("{:.1} TH/s", th_value)
+        } else if th_value >= 10.0 {
+            format!("{:.2} TH/s", th_value)
+        } else {
+            format!("{:.3} TH/s", th_value)
+        }
     } else if hashrate >= 1_000_000_000.0 {
-        format!("{:.2} GH/s", hashrate / 1_000_000_000.0)
+        let gh_value = hashrate / 1_000_000_000.0;
+        if gh_value >= 100.0 {
+            format!("{:.1} GH/s", gh_value)
+        } else if gh_value >= 10.0 {
+            format!("{:.2} GH/s", gh_value)
+        } else if gh_value >= 1.0 {
+            format!("{:.3} GH/s", gh_value)
+        } else {
+            // 如果GH值小于1，降级到MH
+            let mh_value = hashrate / 1_000_000.0;
+            if mh_value >= 100.0 {
+                format!("{:.1} MH/s", mh_value)
+            } else if mh_value >= 10.0 {
+                format!("{:.2} MH/s", mh_value)
+            } else {
+                format!("{:.3} MH/s", mh_value)
+            }
+        }
     } else if hashrate >= 1_000_000.0 {
-        format!("{:.2} MH/s", hashrate / 1_000_000.0)
+        let mh_value = hashrate / 1_000_000.0;
+        if mh_value >= 100.0 {
+            format!("{:.1} MH/s", mh_value)
+        } else if mh_value >= 10.0 {
+            format!("{:.2} MH/s", mh_value)
+        } else if mh_value >= 1.0 {
+            format!("{:.3} MH/s", mh_value)
+        } else {
+            // 如果MH值小于1，降级到KH
+            let kh_value = hashrate / 1_000.0;
+            if kh_value >= 100.0 {
+                format!("{:.1} KH/s", kh_value)
+            } else if kh_value >= 10.0 {
+                format!("{:.2} KH/s", kh_value)
+            } else {
+                format!("{:.3} KH/s", kh_value)
+            }
+        }
     } else if hashrate >= 1_000.0 {
-        format!("{:.2} KH/s", hashrate / 1_000.0)
+        let kh_value = hashrate / 1_000.0;
+        if kh_value >= 100.0 {
+            format!("{:.1} KH/s", kh_value)
+        } else if kh_value >= 10.0 {
+            format!("{:.2} KH/s", kh_value)
+        } else if kh_value >= 1.0 {
+            format!("{:.3} KH/s", kh_value)
+        } else {
+            // 如果KH值小于1，降级到H
+            if hashrate >= 100.0 {
+                format!("{:.1} H/s", hashrate)
+            } else if hashrate >= 10.0 {
+                format!("{:.2} H/s", hashrate)
+            } else {
+                format!("{:.3} H/s", hashrate)
+            }
+        }
     } else if hashrate >= 1.0 {
-        format!("{:.2} H/s", hashrate)
+        if hashrate >= 100.0 {
+            format!("{:.1} H/s", hashrate)
+        } else if hashrate >= 10.0 {
+            format!("{:.2} H/s", hashrate)
+        } else {
+            format!("{:.3} H/s", hashrate)
+        }
     } else {
+        // 对于非常小的算力值，显示更高精度
         format!("{:.6} H/s", hashrate)
     }
 }

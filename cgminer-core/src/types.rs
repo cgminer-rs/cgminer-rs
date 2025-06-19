@@ -649,14 +649,85 @@ impl HashRate {
 
 impl std::fmt::Display for HashRate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.hashes_per_second >= 1_000_000_000_000.0 {
-            write!(f, "{:.2} TH/s", self.as_th_per_second())
-        } else if self.hashes_per_second >= 1_000_000_000.0 {
-            write!(f, "{:.2} GH/s", self.as_gh_per_second())
-        } else if self.hashes_per_second >= 1_000_000.0 {
-            write!(f, "{:.2} MH/s", self.as_mh_per_second())
+        let hashrate = self.hashes_per_second;
+
+        // 智能选择最合适的单位，确保显示值在合理范围内（1-999）
+        if hashrate >= 1_000_000_000_000.0 {
+            let th_value = self.as_th_per_second();
+            if th_value >= 100.0 {
+                write!(f, "{:.1} TH/s", th_value)
+            } else if th_value >= 10.0 {
+                write!(f, "{:.2} TH/s", th_value)
+            } else {
+                write!(f, "{:.3} TH/s", th_value)
+            }
+        } else if hashrate >= 1_000_000_000.0 {
+            let gh_value = self.as_gh_per_second();
+            if gh_value >= 100.0 {
+                write!(f, "{:.1} GH/s", gh_value)
+            } else if gh_value >= 10.0 {
+                write!(f, "{:.2} GH/s", gh_value)
+            } else if gh_value >= 1.0 {
+                write!(f, "{:.3} GH/s", gh_value)
+            } else {
+                // 如果GH值小于1，降级到MH
+                let mh_value = self.as_mh_per_second();
+                if mh_value >= 100.0 {
+                    write!(f, "{:.1} MH/s", mh_value)
+                } else if mh_value >= 10.0 {
+                    write!(f, "{:.2} MH/s", mh_value)
+                } else {
+                    write!(f, "{:.3} MH/s", mh_value)
+                }
+            }
+        } else if hashrate >= 1_000_000.0 {
+            let mh_value = self.as_mh_per_second();
+            if mh_value >= 100.0 {
+                write!(f, "{:.1} MH/s", mh_value)
+            } else if mh_value >= 10.0 {
+                write!(f, "{:.2} MH/s", mh_value)
+            } else if mh_value >= 1.0 {
+                write!(f, "{:.3} MH/s", mh_value)
+            } else {
+                // 如果MH值小于1，降级到KH
+                let kh_value = hashrate / 1_000.0;
+                if kh_value >= 100.0 {
+                    write!(f, "{:.1} KH/s", kh_value)
+                } else if kh_value >= 10.0 {
+                    write!(f, "{:.2} KH/s", kh_value)
+                } else {
+                    write!(f, "{:.3} KH/s", kh_value)
+                }
+            }
+        } else if hashrate >= 1_000.0 {
+            let kh_value = hashrate / 1_000.0;
+            if kh_value >= 100.0 {
+                write!(f, "{:.1} KH/s", kh_value)
+            } else if kh_value >= 10.0 {
+                write!(f, "{:.2} KH/s", kh_value)
+            } else if kh_value >= 1.0 {
+                write!(f, "{:.3} KH/s", kh_value)
+            } else {
+                // 如果KH值小于1，降级到H
+                if hashrate >= 100.0 {
+                    write!(f, "{:.1} H/s", hashrate)
+                } else if hashrate >= 10.0 {
+                    write!(f, "{:.2} H/s", hashrate)
+                } else {
+                    write!(f, "{:.3} H/s", hashrate)
+                }
+            }
+        } else if hashrate >= 1.0 {
+            if hashrate >= 100.0 {
+                write!(f, "{:.1} H/s", hashrate)
+            } else if hashrate >= 10.0 {
+                write!(f, "{:.2} H/s", hashrate)
+            } else {
+                write!(f, "{:.3} H/s", hashrate)
+            }
         } else {
-            write!(f, "{:.2} H/s", self.hashes_per_second)
+            // 对于非常小的算力值，显示更高精度
+            write!(f, "{:.6} H/s", hashrate)
         }
     }
 }
