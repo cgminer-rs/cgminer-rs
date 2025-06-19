@@ -2,10 +2,12 @@
 
 use crate::core::{MiningCore, CoreInfo, CoreConfig};
 use crate::error::CoreError;
+use crate::types::Work;
 use crate::CoreType;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{info, warn, error};
 
 /// 核心工厂特征
@@ -45,10 +47,8 @@ impl CoreRegistry {
     }
 
     /// 注册核心工厂
-    pub fn register_factory(&self, name: String, factory: Box<dyn CoreFactory>) -> Result<(), CoreError> {
-        let mut factories = self.factories.write().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire write lock: {}", e))
-        })?;
+    pub async fn register_factory(&self, name: String, factory: Box<dyn CoreFactory>) -> Result<(), CoreError> {
+        let mut factories = self.factories.write().await;
 
         if factories.contains_key(&name) {
             warn!("核心工厂 '{}' 已存在，将被覆盖", name);
@@ -60,10 +60,8 @@ impl CoreRegistry {
     }
 
     /// 取消注册核心工厂
-    pub fn unregister_factory(&self, name: &str) -> Result<(), CoreError> {
-        let mut factories = self.factories.write().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire write lock: {}", e))
-        })?;
+    pub async fn unregister_factory(&self, name: &str) -> Result<(), CoreError> {
+        let mut factories = self.factories.write().await;
 
         if factories.remove(name).is_some() {
             info!("取消注册核心工厂: {}", name);
@@ -74,28 +72,22 @@ impl CoreRegistry {
     }
 
     /// 获取所有注册的核心工厂
-    pub fn list_factories(&self) -> Result<Vec<CoreInfo>, CoreError> {
-        let factories = self.factories.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn list_factories(&self) -> Result<Vec<CoreInfo>, CoreError> {
+        let factories = self.factories.read().await;
 
         Ok(factories.values().map(|factory| factory.core_info()).collect())
     }
 
     /// 根据名称获取核心工厂
-    pub fn get_factory(&self, name: &str) -> Result<Option<CoreInfo>, CoreError> {
-        let factories = self.factories.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn get_factory(&self, name: &str) -> Result<Option<CoreInfo>, CoreError> {
+        let factories = self.factories.read().await;
 
         Ok(factories.get(name).map(|factory| factory.core_info()))
     }
 
     /// 根据类型获取核心工厂
-    pub fn get_factories_by_type(&self, core_type: &CoreType) -> Result<Vec<CoreInfo>, CoreError> {
-        let factories = self.factories.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn get_factories_by_type(&self, core_type: &CoreType) -> Result<Vec<CoreInfo>, CoreError> {
+        let factories = self.factories.read().await;
 
         Ok(factories
             .values()
@@ -108,9 +100,7 @@ impl CoreRegistry {
     pub async fn create_core(&self, factory_name: &str, config: CoreConfig) -> Result<String, CoreError> {
         // 获取工厂
         let _factory = {
-            let factories = self.factories.read().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-            })?;
+            let factories = self.factories.read().await;
 
             factories.get(factory_name).ok_or_else(|| {
                 CoreError::runtime(format!("核心工厂 '{}' 不存在", factory_name))
@@ -119,9 +109,7 @@ impl CoreRegistry {
 
         // 验证配置
         {
-            let factories = self.factories.read().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-            })?;
+            let factories = self.factories.read().await;
 
             if let Some(factory) = factories.get(factory_name) {
                 factory.validate_config(&config)?;
@@ -130,9 +118,7 @@ impl CoreRegistry {
 
         // 创建核心实例
         let core = {
-            let factories = self.factories.read().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-            })?;
+            let factories = self.factories.read().await;
 
             if let Some(factory) = factories.get(factory_name) {
                 factory.create_core(config.clone()).await?
@@ -146,9 +132,7 @@ impl CoreRegistry {
 
         // 存储核心实例
         {
-            let mut active_cores = self.active_cores.write().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire write lock: {}", e))
-            })?;
+            let mut active_cores = self.active_cores.write().await;
 
             active_cores.insert(core_id.clone(), core);
         }
@@ -158,10 +142,8 @@ impl CoreRegistry {
     }
 
     /// 获取活跃的核心实例
-    pub fn get_core(&self, core_id: &str) -> Result<Option<()>, CoreError> {
-        let active_cores = self.active_cores.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn get_core(&self, core_id: &str) -> Result<Option<()>, CoreError> {
+        let active_cores = self.active_cores.read().await;
 
         Ok(if active_cores.contains_key(core_id) {
             Some(())
@@ -171,10 +153,8 @@ impl CoreRegistry {
     }
 
     /// 列出所有活跃的核心实例
-    pub fn list_active_cores(&self) -> Result<Vec<String>, CoreError> {
-        let active_cores = self.active_cores.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn list_active_cores(&self) -> Result<Vec<String>, CoreError> {
+        let active_cores = self.active_cores.read().await;
 
         Ok(active_cores.keys().cloned().collect())
     }
@@ -182,9 +162,7 @@ impl CoreRegistry {
     /// 移除核心实例
     pub async fn remove_core(&self, core_id: &str) -> Result<(), CoreError> {
         let mut core = {
-            let mut active_cores = self.active_cores.write().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire write lock: {}", e))
-            })?;
+            let mut active_cores = self.active_cores.write().await;
 
             active_cores.remove(core_id).ok_or_else(|| {
                 CoreError::runtime(format!("核心实例 '{}' 不存在", core_id))
@@ -200,12 +178,23 @@ impl CoreRegistry {
         Ok(())
     }
 
+    /// 向指定核心提交工作
+    pub async fn submit_work_to_core(&self, core_id: &str, work: Work) -> Result<(), CoreError> {
+        let mut active_cores = self.active_cores.write().await;
+
+        if let Some(core) = active_cores.get_mut(core_id) {
+            core.submit_work(work).await.map_err(|e| {
+                CoreError::runtime(format!("Failed to submit work to core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
     /// 关闭所有核心实例
     pub async fn shutdown_all(&self) -> Result<(), CoreError> {
         let core_ids: Vec<String> = {
-            let active_cores = self.active_cores.read().map_err(|e| {
-                CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-            })?;
+            let active_cores = self.active_cores.read().await;
             active_cores.keys().cloned().collect()
         };
 
@@ -220,14 +209,9 @@ impl CoreRegistry {
     }
 
     /// 获取注册表统计信息
-    pub fn get_stats(&self) -> Result<RegistryStats, CoreError> {
-        let factories = self.factories.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
-
-        let active_cores = self.active_cores.read().map_err(|e| {
-            CoreError::runtime(format!("Failed to acquire read lock: {}", e))
-        })?;
+    pub async fn get_stats(&self) -> Result<RegistryStats, CoreError> {
+        let factories = self.factories.read().await;
+        let active_cores = self.active_cores.read().await;
 
         Ok(RegistryStats {
             registered_factories: factories.len(),

@@ -62,9 +62,7 @@ work_timeout_ms = 2000       # 减少工作超时提高响应速度
 # CPU绑定配置 - 提升挖矿性能和稳定性
 [cores.btc_software.cpu_affinity]
 enabled = true               # 启用CPU绑定
-strategy = "performance_first" # 性能优先策略，优先使用高性能核心
-avoid_hyperthreading = false  # 允许使用超线程提高并发
-prefer_performance_cores = true # 优先使用性能核心
+strategy = "round_robin"     # CPU绑定策略: "round_robin", "manual", "performance_first", "physical_only"
 # manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
 
 # Maijie L7 ASIC核心配置 (cgminer-a-maijie-l7-core)
@@ -165,8 +163,8 @@ enabled = true
 # 指标收集间隔 (秒)
 metrics_interval = 30
 
-# Prometheus 指标端口 (可选)
-prometheus_port = 9090
+# Web监控端口 (可选) - 替代Prometheus的轻量级监控
+web_port = 8080
 
 # 告警阈值配置
 [monitoring.alert_thresholds]
@@ -187,6 +185,23 @@ max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
 min_hashrate = 1.5  # 调整为1.5 GH/s，适合软算法核心的实际性能
+
+# =============================================================================
+# =============================================================================
+# Web监控界面配置 (轻量级监控替代Prometheus)
+# =============================================================================
+[web]
+# 启用Web监控界面
+enabled = true
+
+# 绑定地址
+bind_address = "127.0.0.1"
+
+# Web监控端口
+port = 8080
+
+# 静态文件路径 (可选)
+static_path = "web/static"
 
 # =============================================================================
 # 算力计量器配置 (定期算力输出)

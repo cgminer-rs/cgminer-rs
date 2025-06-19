@@ -9,8 +9,8 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 pub use manager::MiningManager;
-pub use work_queue::{WorkQueue, WorkQueueManager};
-pub use hashmeter::{Hashmeter, HashmeterConfig, HashrateStats, DeviceHashrateStats};
+
+pub use hashmeter::{Hashmeter, HashmeterConfig};
 
 /// 挖矿状态
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

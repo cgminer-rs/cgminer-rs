@@ -48,25 +48,25 @@ pub struct CpuCore {
 /// 线程池管理器
 pub struct ThreadPoolManager {
     /// 工作线程池
-    worker_pools: HashMap<String, WorkerPool>,
+    _worker_pools: HashMap<String, WorkerPool>,
     /// 线程池配置
-    pool_configs: HashMap<String, PoolConfig>,
+    _pool_configs: HashMap<String, PoolConfig>,
 }
 
 /// 工作线程池
 pub struct WorkerPool {
     /// 池名称
-    name: String,
+    _name: String,
     /// 线程数量
-    thread_count: usize,
+    _thread_count: usize,
     /// 队列大小
-    queue_size: usize,
+    _queue_size: usize,
     /// 当前任务数
-    active_tasks: usize,
+    _active_tasks: usize,
     /// 总处理任务数
-    total_tasks: u64,
+    _total_tasks: u64,
     /// 平均处理时间
-    avg_processing_time: Duration,
+    _avg_processing_time: Duration,
 }
 
 /// 线程池配置
@@ -401,8 +401,8 @@ impl AffinityManager {
 impl ThreadPoolManager {
     pub fn new() -> Self {
         Self {
-            worker_pools: HashMap::new(),
-            pool_configs: HashMap::new(),
+            _worker_pools: HashMap::new(),
+            _pool_configs: HashMap::new(),
         }
     }
 

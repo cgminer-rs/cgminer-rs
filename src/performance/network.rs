@@ -21,7 +21,7 @@ pub struct ConnectionPoolManager {
     /// 连接池配置
     pool_configs: HashMap<String, ConnectionPoolConfig>,
     /// 活跃连接数
-    active_connections: HashMap<String, usize>,
+    _active_connections: HashMap<String, usize>,
 }
 
 /// 连接池配置
@@ -44,7 +44,7 @@ pub struct BandwidthManager {
     /// 带宽限制配置
     bandwidth_limits: HashMap<String, BandwidthLimit>,
     /// 流量统计
-    traffic_stats: HashMap<String, TrafficStats>,
+    _traffic_stats: HashMap<String, TrafficStats>,
 }
 
 /// 带宽限制
@@ -225,7 +225,7 @@ impl NetworkOptimizer {
             error_message: None,
         };
 
-        info!("🌐 网络优化完成: 延迟改进 {:.1}%, 吞吐量改进 {:.1}%", 
+        info!("🌐 网络优化完成: 延迟改进 {:.1}%, 吞吐量改进 {:.1}%",
               latency_improvement, throughput_improvement);
         Ok(result)
     }
@@ -365,7 +365,7 @@ impl ConnectionPoolManager {
     pub fn new() -> Self {
         Self {
             pool_configs: HashMap::new(),
-            active_connections: HashMap::new(),
+            _active_connections: HashMap::new(),
         }
     }
 
@@ -380,7 +380,7 @@ impl BandwidthManager {
     pub fn new() -> Self {
         Self {
             bandwidth_limits: HashMap::new(),
-            traffic_stats: HashMap::new(),
+            _traffic_stats: HashMap::new(),
         }
     }
 

@@ -34,6 +34,7 @@ pub struct MiningManager {
     state: Arc<RwLock<MiningState>>,
     /// 挖矿统计
     stats: Arc<RwLock<MiningStats>>,
+
     /// 工作分发通道
     work_sender: Arc<Mutex<Option<mpsc::UnboundedSender<WorkItem>>>>,
     work_receiver: Arc<Mutex<Option<mpsc::UnboundedReceiver<WorkItem>>>>,
@@ -96,6 +97,7 @@ impl MiningManager {
             config: mining_config,
             state: Arc::new(RwLock::new(MiningState::Stopped)),
             stats: Arc::new(RwLock::new(MiningStats::new())),
+
             work_sender: Arc::new(Mutex::new(Some(work_sender))),
             work_receiver: Arc::new(Mutex::new(Some(work_receiver))),
             result_sender: Arc::new(Mutex::new(Some(result_sender))),
@@ -118,11 +120,11 @@ impl MiningManager {
 
         for core_type in &cores_config.enabled_cores {
             match core_type.as_str() {
-                "software" => {
+                "software" | "btc-software" | "btc" | "cpu" => {
                     // 软算法核心不需要设备驱动，直接通过核心管理
                     info!("软算法核心已启用，将通过核心管理器直接管理");
                 }
-                "asic" => {
+                "asic" | "maijie-l7" | "l7" => {
                     // ASIC核心现在通过工厂模式管理，不需要在这里注册设备驱动
                     info!("ASIC核心将通过统一设备工厂管理");
                 }
@@ -148,13 +150,13 @@ impl MiningManager {
 
     /// 列出可用的核心类型
     pub async fn list_available_cores(&self) -> Result<Vec<cgminer_core::CoreInfo>, MiningError> {
-        self.core_registry.list_factories()
+        self.core_registry.list_factories().await
             .map_err(|e| MiningError::CoreError(format!("获取核心列表失败: {}", e)))
     }
 
     /// 根据类型获取核心
     pub async fn get_cores_by_type(&self, core_type: &CoreType) -> Result<Vec<cgminer_core::CoreInfo>, MiningError> {
-        self.core_registry.get_factories_by_type(core_type)
+        self.core_registry.get_factories_by_type(core_type).await
             .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))
     }
 
@@ -354,6 +356,7 @@ impl MiningManager {
         let pool_manager = self.pool_manager.clone();
         let _monitoring_system = self.monitoring_system.clone();
         let _event_sender = self.event_sender.clone();
+        let work_sender = self.work_sender.clone();
         let scan_interval = self.config.scan_interval;
 
         let handle = tokio::spawn(async move {
@@ -379,9 +382,34 @@ impl MiningManager {
                     // 这里可以添加设备健康检查逻辑
                 }
 
-                // 检查矿池连接状态
-                if let Ok(_pool_manager) = pool_manager.try_lock() {
-                    // 这里可以添加矿池连接检查逻辑
+                // 检查矿池连接状态并获取工作
+                if let Ok(pool_manager) = pool_manager.try_lock() {
+                    // 获取工作并发送到工作分发器
+                    if let Ok(work_sender_guard) = work_sender.try_lock() {
+                        if let Some(sender) = work_sender_guard.as_ref() {
+                            // 尝试从矿池获取工作
+                            match pool_manager.get_work().await {
+                                Ok(work) => {
+                                    let work_item = WorkItem {
+                                        work,
+                                        assigned_device: None, // 让工作分发器决定分配给哪个设备
+                                        created_at: SystemTime::now(),
+                                        priority: 1,
+                                        retry_count: 0,
+                                    };
+
+                                    if let Err(e) = sender.send(work_item) {
+                                        warn!("Failed to send work to dispatcher: {}", e);
+                                    } else {
+                                        debug!("Work sent to dispatcher");
+                                    }
+                                }
+                                Err(e) => {
+                                    debug!("Failed to get work from pool: {}", e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
@@ -394,7 +422,7 @@ impl MiningManager {
     async fn start_work_dispatch(&self) -> Result<(), MiningError> {
         let running = self.running.clone();
         let device_manager = self.device_manager.clone();
-        let active_cores = self.active_cores.clone();
+        let core_registry = self.core_registry.clone();
         let work_receiver = self.work_receiver.clone();
 
         let handle = tokio::spawn(async move {
@@ -407,8 +435,10 @@ impl MiningManager {
                             let mut work_submitted = false;
 
                             // 尝试分发到核心
-                            if let Ok(mut cores) = active_cores.try_lock() {
-                                for (core_id, core) in cores.iter_mut() {
+                            if let Ok(active_core_ids) = core_registry.list_active_cores().await {
+                                if !active_core_ids.is_empty() {
+                                    debug!("Found {} active cores for work distribution", active_core_ids.len());
+
                                     // 转换Work格式到CoreWork
                                     let core_work = cgminer_core::Work {
                                         id: work_item.work.id.as_u128() as u64, // 简化转换
@@ -419,13 +449,20 @@ impl MiningManager {
                                         extranonce: vec![0; 4], // 默认extranonce
                                     };
 
-                                    if let Err(e) = core.submit_work(core_work).await {
-                                        warn!("Failed to submit work to core {}: {}", core_id, e);
-                                    } else {
-                                        debug!("Work submitted to core {}", core_id);
-                                        work_submitted = true;
-                                        break; // 只提交给第一个可用的核心
+                                    // 向第一个可用的核心提交工作
+                                    if let Some(core_id) = active_core_ids.first() {
+                                        match core_registry.submit_work_to_core(core_id, core_work).await {
+                                            Ok(()) => {
+                                                work_submitted = true;
+                                                debug!("Work successfully submitted to core: {}", core_id);
+                                            }
+                                            Err(e) => {
+                                                warn!("Failed to submit work to core {}: {}", core_id, e);
+                                            }
+                                        }
                                     }
+                                } else {
+                                    debug!("No active cores found for work distribution");
                                 }
                             }
 
@@ -615,7 +652,7 @@ impl MiningManager {
 
         for core_type in enabled_cores {
             match core_type.as_str() {
-                "software" => {
+                "software" | "btc-software" | "btc" | "cpu" => {
                     info!("启动软算法核心");
 
                     // 创建软算法核心配置
@@ -638,19 +675,16 @@ impl MiningManager {
                     };
 
                     // 创建软算法核心
-                    let core_id = self.create_core("software", core_config).await?;
+                    let core_id = self.create_core("btc-software", core_config).await?;
 
                     // 检查核心是否创建成功
-                    if self.core_registry.get_core(&core_id)
+                    if self.core_registry.get_core(&core_id).await
                         .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))?.is_some() {
                         info!("✅ 软算法核心创建成功: {}", core_id);
-
-                        // 注意：核心的启动和管理现在由CoreRegistry内部处理
-                        // 我们只需要记录核心ID用于后续操作
-                        info!("软算法核心已创建: {}", core_id);
+                        info!("软算法核心已在CoreRegistry中管理: {}", core_id);
                     }
                 }
-                "asic" => {
+                "asic" | "maijie-l7" | "l7" => {
                     if let Some(maijie_l7_config) = &self.full_config.cores.maijie_l7 {
                         if maijie_l7_config.enabled {
                             info!("启动Maijie L7 ASIC核心");
@@ -671,9 +705,9 @@ impl MiningManager {
                                 },
                             };
 
-                            let core_id = self.create_core("asic", core_config).await?;
+                            let core_id = self.create_core("maijie-l7", core_config).await?;
 
-                            if self.core_registry.get_core(&core_id)
+                            if self.core_registry.get_core(&core_id).await
                                 .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))?.is_some() {
                                 info!("✅ ASIC核心创建成功: {}", core_id);
                             }

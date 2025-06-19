@@ -11,10 +11,7 @@ use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
 pub use manager::PoolManager;
-pub use stratum::{StratumClient, StratumMessage};
-pub use connection::PoolConnection;
-pub use scheduler::{PoolScheduler, PoolQuota, FailoverConfig, SchedulerStats};
-pub use switcher::{PoolSwitcher, PoolMetrics, SwitchConfig, SwitchEvent, SwitchReason};
+
 
 /// 矿池信息
 #[derive(Debug, Clone, Serialize, Deserialize)]

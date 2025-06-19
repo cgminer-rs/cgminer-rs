@@ -22,10 +22,7 @@ pub struct PoolManager {
     active_pool: Arc<RwLock<Option<u32>>>,
     /// 配置
     config: PoolConfig,
-    /// 工作接收通道
-    work_sender: Arc<Mutex<Option<mpsc::UnboundedSender<Work>>>>,
-    /// 份额提交通道
-    share_receiver: Arc<Mutex<Option<mpsc::UnboundedReceiver<Share>>>>,
+
     /// 事件广播
     event_sender: broadcast::Sender<PoolEvent>,
     /// 连接管理任务句柄
@@ -69,8 +66,8 @@ impl PoolManager {
             pool_stats.insert(pool_id, PoolStats::new(pool_id));
         }
 
-        let (work_sender, _) = mpsc::unbounded_channel();
-        let (_, share_receiver) = mpsc::unbounded_channel();
+        let (_work_sender, _): (mpsc::UnboundedSender<Work>, _) = mpsc::unbounded_channel();
+        let (_, _share_receiver): (_, mpsc::UnboundedReceiver<Share>) = mpsc::unbounded_channel();
         let (event_sender, _) = broadcast::channel(1000);
 
         Ok(Self {
@@ -79,8 +76,7 @@ impl PoolManager {
             pool_stats: Arc::new(RwLock::new(pool_stats)),
             active_pool: Arc::new(RwLock::new(None)),
             config,
-            work_sender: Arc::new(Mutex::new(Some(work_sender))),
-            share_receiver: Arc::new(Mutex::new(Some(share_receiver))),
+
             event_sender,
             connection_handle: Arc::new(Mutex::new(None)),
             heartbeat_handle: Arc::new(Mutex::new(None)),

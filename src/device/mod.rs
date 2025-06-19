@@ -112,11 +112,13 @@ impl DeviceInfo {
         self.updated_at = SystemTime::now();
     }
 
+    #[allow(dead_code)]
     pub fn increment_rejected_shares(&mut self) {
         self.rejected_shares += 1;
         self.updated_at = SystemTime::now();
     }
 
+    #[allow(dead_code)]
     pub fn increment_hardware_errors(&mut self) {
         self.hardware_errors += 1;
         self.updated_at = SystemTime::now();
@@ -126,10 +128,12 @@ impl DeviceInfo {
         matches!(self.status, DeviceStatus::Idle | DeviceStatus::Mining)
     }
 
+    #[allow(dead_code)]
     pub fn is_overheated(&self) -> bool {
         matches!(self.status, DeviceStatus::Overheated)
     }
 
+    #[allow(dead_code)]
     pub fn get_error_rate(&self) -> f64 {
         let total_shares = self.accepted_shares + self.rejected_shares;
         if total_shares == 0 {
@@ -156,6 +160,7 @@ pub struct Work {
     pub job_id: String,
     pub target: [u8; 32],
     pub header: [u8; 80],
+    #[allow(dead_code)]
     pub midstate: [[u8; 32]; 8],
     pub difficulty: f64,
     pub created_at: SystemTime,
@@ -181,6 +186,7 @@ impl Work {
         SystemTime::now() > self.expires_at
     }
 
+    #[allow(dead_code)]
     pub fn time_to_expire(&self) -> Duration {
         self.expires_at.duration_since(SystemTime::now())
             .unwrap_or(Duration::from_secs(0))
@@ -212,6 +218,7 @@ impl MiningResult {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_extra_nonce(mut self, extra_nonce: u32) -> Self {
         self.extra_nonce = Some(extra_nonce);
         self

@@ -41,33 +41,33 @@ impl WebSocketManager {
     /// 创建新的 WebSocket 管理器
     pub fn new() -> Self {
         let (broadcast_sender, _) = broadcast::channel(1000);
-        
+
         Self {
             connections: Arc::new(RwLock::new(std::collections::HashMap::new())),
             broadcast_sender,
         }
     }
-    
+
     /// 添加连接
     pub async fn add_connection(&self, connection: WebSocketConnection) {
         let id = connection.id;
         self.connections.write().await.insert(id, connection);
         info!("WebSocket connection added: {}", id);
     }
-    
+
     /// 移除连接
     pub async fn remove_connection(&self, id: Uuid) {
         self.connections.write().await.remove(&id);
         info!("WebSocket connection removed: {}", id);
     }
-    
+
     /// 广播消息
     pub async fn broadcast(&self, message: WebSocketMessage) {
         if let Err(e) = self.broadcast_sender.send(message) {
             debug!("Failed to broadcast WebSocket message: {}", e);
         }
     }
-    
+
     /// 发送消息到特定连接
     pub async fn send_to_connection(&self, connection_id: Uuid, message: WebSocketMessage) {
         let connections = self.connections.read().await;
@@ -75,22 +75,22 @@ impl WebSocketManager {
             connection.send_message(message).await;
         }
     }
-    
+
     /// 获取连接数量
     pub async fn get_connection_count(&self) -> usize {
         self.connections.read().await.len()
     }
-    
+
     /// 获取连接统计
     pub async fn get_connection_stats(&self) -> WebSocketStats {
         let connections = self.connections.read().await;
         let total_connections = connections.len();
         let mut total_subscriptions = 0;
-        
+
         for connection in connections.values() {
             total_subscriptions += connection.subscriptions.read().await.len();
         }
-        
+
         WebSocketStats {
             total_connections,
             total_subscriptions,
@@ -99,18 +99,18 @@ impl WebSocketManager {
                 .unwrap_or(Duration::from_secs(0)),
         }
     }
-    
+
     /// 清理断开的连接
     pub async fn cleanup_connections(&self) {
         let mut connections = self.connections.write().await;
         let mut to_remove = Vec::new();
-        
+
         for (id, connection) in connections.iter() {
             if connection.is_disconnected().await {
                 to_remove.push(*id);
             }
         }
-        
+
         for id in to_remove {
             connections.remove(&id);
             info!("Cleaned up disconnected WebSocket connection: {}", id);
@@ -132,7 +132,7 @@ impl WebSocketConnection {
             last_activity: Arc::new(RwLock::new(std::time::SystemTime::now())),
         }
     }
-    
+
     /// 发送消息
     pub async fn send_message(&self, message: WebSocketMessage) {
         if let Ok(json) = serde_json::to_string(&message) {
@@ -146,7 +146,7 @@ impl WebSocketConnection {
             }
         }
     }
-    
+
     /// 订阅事件
     pub async fn subscribe(&self, events: Vec<String>) {
         let mut subscriptions = self.subscriptions.write().await;
@@ -155,7 +155,7 @@ impl WebSocketConnection {
         }
         self.update_activity().await;
     }
-    
+
     /// 取消订阅事件
     pub async fn unsubscribe(&self, events: Vec<String>) {
         let mut subscriptions = self.subscriptions.write().await;
@@ -164,22 +164,22 @@ impl WebSocketConnection {
         }
         self.update_activity().await;
     }
-    
+
     /// 检查是否订阅了特定事件
     pub async fn is_subscribed(&self, event: &str) -> bool {
         self.subscriptions.read().await.contains(event)
     }
-    
+
     /// 更新活动时间
     pub async fn update_activity(&self) {
         *self.last_activity.write().await = std::time::SystemTime::now();
     }
-    
+
     /// 检查连接是否断开
     pub async fn is_disconnected(&self) -> bool {
         self.sender.lock().await.is_none()
     }
-    
+
     /// 获取连接信息
     pub async fn get_info(&self) -> ConnectionInfo {
         ConnectionInfo {
@@ -194,7 +194,7 @@ impl WebSocketConnection {
 /// WebSocket 处理器
 pub struct WebSocketHandler {
     manager: Arc<WebSocketManager>,
-    mining_manager: Arc<crate::mining::MiningManager>,
+    _mining_manager: Arc<crate::mining::MiningManager>,
 }
 
 impl WebSocketHandler {
@@ -202,10 +202,10 @@ impl WebSocketHandler {
     pub fn new(mining_manager: Arc<crate::mining::MiningManager>) -> Self {
         Self {
             manager: Arc::new(WebSocketManager::new()),
-            mining_manager,
+            _mining_manager: mining_manager,
         }
     }
-    
+
     /// 处理 WebSocket 升级
     pub async fn handle_upgrade(
         ws: WebSocketUpgrade,
@@ -213,21 +213,21 @@ impl WebSocketHandler {
     ) -> Response {
         ws.on_upgrade(move |socket| Self::handle_socket(socket, state))
     }
-    
+
     /// 处理 WebSocket 连接
     async fn handle_socket(socket: WebSocket, state: AppState) {
         let connection_id = Uuid::new_v4();
         info!("New WebSocket connection: {}", connection_id);
-        
+
         let (sender, mut receiver) = socket.split();
         let connection = WebSocketConnection::new(connection_id, sender);
-        
+
         // 创建处理器
         let handler = WebSocketHandler::new(state.mining_manager.clone());
-        
+
         // 添加连接到管理器
         handler.manager.add_connection(connection).await;
-        
+
         // 启动心跳任务
         let heartbeat_manager = handler.manager.clone();
         let heartbeat_id = connection_id;
@@ -235,7 +235,7 @@ impl WebSocketHandler {
             let mut interval = interval(Duration::from_secs(30));
             loop {
                 interval.tick().await;
-                
+
                 let connections = heartbeat_manager.connections.read().await;
                 if let Some(connection) = connections.get(&heartbeat_id) {
                     connection.send_message(WebSocketMessage::Ping).await;
@@ -244,7 +244,7 @@ impl WebSocketHandler {
                 }
             }
         });
-        
+
         // 订阅挖矿事件
         let mut mining_events = state.mining_manager.subscribe_events();
         let event_manager = handler.manager.clone();
@@ -252,7 +252,7 @@ impl WebSocketHandler {
         tokio::spawn(async move {
             while let Ok(mining_event) = mining_events.recv().await {
                 let ws_message = Self::convert_mining_event(mining_event);
-                
+
                 let connections = event_manager.connections.read().await;
                 if let Some(connection) = connections.get(&event_id) {
                     if connection.is_subscribed("mining_events").await {
@@ -263,7 +263,7 @@ impl WebSocketHandler {
                 }
             }
         });
-        
+
         // 处理接收到的消息
         while let Some(msg) = receiver.next().await {
             match msg {
@@ -290,11 +290,11 @@ impl WebSocketHandler {
                 _ => {}
             }
         }
-        
+
         // 移除连接
         handler.manager.remove_connection(connection_id).await;
     }
-    
+
     /// 处理 WebSocket 消息
     async fn handle_message(&self, connection_id: Uuid, message: WebSocketMessage) {
         match message {
@@ -320,12 +320,12 @@ impl WebSocketHandler {
             }
         }
     }
-    
+
     /// 转换挖矿事件为 WebSocket 消息
     fn convert_mining_event(event: MiningEvent) -> WebSocketMessage {
         let event_type = event.event_type().to_string();
         let data = serde_json::to_value(&event).unwrap_or(serde_json::Value::Null);
-        
+
         WebSocketMessage::MiningEvent {
             event: event_type,
             data,

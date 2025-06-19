@@ -8,7 +8,7 @@ use cgminer_core::CoreRegistry;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{RwLock, Mutex, mpsc};
+use tokio::sync::{RwLock, Mutex};
 use tokio::time::interval;
 use tracing::{info, warn, error, debug};
 
@@ -24,10 +24,7 @@ pub struct DeviceManager {
     device_factory: Arc<Mutex<UnifiedDeviceFactory>>,
     /// 配置
     config: DeviceConfig,
-    /// 工作队列发送器
-    work_sender: Option<mpsc::UnboundedSender<(u32, Work)>>,
-    /// 结果队列接收器
-    result_receiver: Option<mpsc::UnboundedReceiver<MiningResult>>,
+
     /// 监控任务句柄
     monitoring_handle: Option<tokio::task::JoinHandle<()>>,
     /// 运行状态
@@ -45,8 +42,6 @@ impl DeviceManager {
             device_stats: Arc::new(RwLock::new(HashMap::new())),
             device_factory: Arc::new(Mutex::new(device_factory)),
             config,
-            work_sender: None,
-            result_receiver: None,
             monitoring_handle: None,
             running: Arc::new(RwLock::new(false)),
         }

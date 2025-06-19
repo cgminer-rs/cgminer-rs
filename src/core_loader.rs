@@ -58,7 +58,7 @@ impl CoreLoader {
             warn!("动态加载核心失败: {}", e);
         }
 
-        let stats = self.registry.get_stats()?;
+        let stats = self.registry.get_stats().await?;
         info!("核心加载完成，共加载 {} 个工厂，{} 个活跃核心",
               stats.registered_factories, stats.active_cores);
 
@@ -73,7 +73,7 @@ impl CoreLoader {
         let factory = cgminer_s_btc_core::create_factory();
         let core_info = factory.core_info();
 
-        self.registry.register_factory("btc-software".to_string(), factory)?;
+        self.registry.register_factory("btc-software".to_string(), factory).await?;
 
         {
             let mut loaded = self.loaded_cores.write().map_err(|e| {
@@ -94,7 +94,7 @@ impl CoreLoader {
         let factory = cgminer_a_maijie_l7_core::create_factory();
         let core_info = factory.core_info();
 
-        self.registry.register_factory("maijie-l7".to_string(), factory)?;
+        self.registry.register_factory("maijie-l7".to_string(), factory).await?;
 
         {
             let mut loaded = self.loaded_cores.write().map_err(|e| {
@@ -197,13 +197,13 @@ impl CoreLoader {
     }
 
     /// 列出所有已加载的核心
-    pub fn list_loaded_cores(&self) -> Result<Vec<CoreInfo>, CoreError> {
-        self.registry.list_factories()
+    pub async fn list_loaded_cores(&self) -> Result<Vec<CoreInfo>, CoreError> {
+        self.registry.list_factories().await
     }
 
     /// 根据类型获取核心
-    pub fn get_cores_by_type(&self, core_type: &CoreType) -> Result<Vec<CoreInfo>, CoreError> {
-        self.registry.get_factories_by_type(core_type)
+    pub async fn get_cores_by_type(&self, core_type: &CoreType) -> Result<Vec<CoreInfo>, CoreError> {
+        self.registry.get_factories_by_type(core_type).await
     }
 
     /// 检查核心是否已加载
@@ -217,7 +217,7 @@ impl CoreLoader {
         info!("卸载核心: {}", name);
 
         // 从注册表中移除
-        self.registry.unregister_factory(name)?;
+        self.registry.unregister_factory(name).await?;
 
         // 从已加载列表中移除
         {
@@ -256,8 +256,8 @@ impl CoreLoader {
     }
 
     /// 获取加载统计信息
-    pub fn get_load_stats(&self) -> Result<LoadStats, CoreError> {
-        let registry_stats = self.registry.get_stats()?;
+    pub async fn get_load_stats(&self) -> Result<LoadStats, CoreError> {
+        let registry_stats = self.registry.get_stats().await?;
         let loaded = self.loaded_cores.read().map_err(|e| {
             CoreError::runtime(format!("Failed to acquire read lock: {}", e))
         })?;

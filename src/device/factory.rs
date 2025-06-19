@@ -180,7 +180,7 @@ impl UnifiedDeviceFactory {
         // 创建软算法核心工厂
         let factory = cgminer_s_btc_core::create_factory();
 
-        self.core_registry.register_factory("btc-software".to_string(), factory)
+        self.core_registry.register_factory("btc-software".to_string(), factory).await
             .map_err(|e| DeviceError::InitializationFailed {
                 device_id: 0,
                 reason: format!("注册BTC软算法核心失败: {}", e),
@@ -218,7 +218,7 @@ impl UnifiedDeviceFactory {
         // 创建ASIC核心工厂
         let factory = cgminer_a_maijie_l7_core::create_factory();
 
-        self.core_registry.register_factory("maijie-l7".to_string(), factory)
+        self.core_registry.register_factory("maijie-l7".to_string(), factory).await
             .map_err(|e| DeviceError::InitializationFailed {
                 device_id: 0,
                 reason: format!("注册Maijie L7核心失败: {}", e),
@@ -267,10 +267,7 @@ pub struct CoreDeviceProxy {
     device_id: u32,
     /// 核心ID
     core_id: String,
-    /// 核心注册表
-    core_registry: Arc<CoreRegistry>,
-    /// 设备配置
-    config: DeviceConfig,
+
     /// 设备信息缓存
     device_cache: Arc<tokio::sync::RwLock<Option<DeviceInfo>>>,
 }
@@ -280,14 +277,12 @@ impl CoreDeviceProxy {
     pub async fn new(
         device_id: u32,
         core_id: String,
-        core_registry: Arc<CoreRegistry>,
-        config: DeviceConfig,
+        _core_registry: Arc<CoreRegistry>,
+        _config: DeviceConfig,
     ) -> Result<Self, DeviceError> {
         let proxy = Self {
             device_id,
             core_id,
-            core_registry,
-            config,
             device_cache: Arc::new(tokio::sync::RwLock::new(None)),
         };
 

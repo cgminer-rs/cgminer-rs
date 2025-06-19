@@ -284,6 +284,7 @@ impl Config {
         Ok(config)
     }
 
+    #[allow(dead_code)]
     pub fn save(&self, path: &str) -> Result<()> {
         let config_content = toml::to_string_pretty(self)
             .context("Failed to serialize config")?;

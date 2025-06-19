@@ -21,7 +21,7 @@ pub struct MemoryOptimizer {
 /// 内存池
 pub struct MemoryPool {
     /// 池名称
-    name: String,
+    _name: String,
     /// 块大小
     block_size: usize,
     /// 总块数
@@ -29,9 +29,9 @@ pub struct MemoryPool {
     /// 已使用块数
     used_blocks: usize,
     /// 空闲块列表
-    free_blocks: Vec<usize>,
+    _free_blocks: Vec<usize>,
     /// 创建时间
-    created_at: Instant,
+    _created_at: Instant,
 }
 
 /// 缓存管理器
@@ -45,7 +45,7 @@ pub struct CacheManager {
 /// LRU缓存
 pub struct LruCache {
     /// 缓存名称
-    name: String,
+    _name: String,
     /// 最大容量
     max_capacity: usize,
     /// 当前大小
@@ -63,13 +63,13 @@ pub struct CacheEntry {
     /// 最后访问时间
     last_access: Instant,
     /// 访问次数
-    access_count: u64,
+    _access_count: u64,
 }
 
 /// 垃圾回收管理器
 pub struct GcManager {
     /// GC配置
-    config: GcConfig,
+    _config: GcConfig,
     /// 上次GC时间
     last_gc: Instant,
     /// GC统计
@@ -398,7 +398,7 @@ impl LruCache {
 impl GcManager {
     pub fn new(config: GcConfig) -> Self {
         Self {
-            config,
+            _config: config,
             last_gc: Instant::now(),
             gc_stats: GcStats::default(),
         }

@@ -68,14 +68,14 @@ async fn main() {
     }
 
     // 显示加载的核心信息
-    match core_loader.get_load_stats() {
+    match core_loader.get_load_stats().await {
         Ok(stats) => {
             info!("✅ Mining cores loaded successfully");
             info!("📊 {}", stats);
             info!("═══════════════════════════════════════════════════════════");
 
             // 列出所有已加载的核心
-            if let Ok(cores) = core_loader.list_loaded_cores() {
+            if let Ok(cores) = core_loader.list_loaded_cores().await {
                 info!("🎯 Available Mining Cores:");
                 for core in cores {
                     info!("   ✓ {} ({}): {}", core.name, core.core_type, core.description);

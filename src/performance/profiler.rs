@@ -44,15 +44,15 @@ pub struct PerformanceCounter {
 /// 采样器
 pub struct Sampler {
     /// 采样器名称
-    name: String,
+    _name: String,
     /// 采样间隔
-    interval: Duration,
+    _interval: Duration,
     /// 采样历史
-    samples: Vec<Sample>,
+    _samples: Vec<Sample>,
     /// 最大样本数
-    max_samples: usize,
+    _max_samples: usize,
     /// 最后采样时间
-    last_sample: Instant,
+    _last_sample: Instant,
 }
 
 /// 样本
@@ -489,7 +489,7 @@ impl Profiler {
         _samplers: &Arc<RwLock<HashMap<String, Sampler>>>,
     ) -> Result<AlgorithmAnalysis, Box<dyn std::error::Error>> {
         let mut algorithm_stats = HashMap::new();
-        
+
         algorithm_stats.insert("SHA256".to_string(), AlgorithmStats {
             name: "SHA256".to_string(),
             avg_execution_time: Duration::from_nanos(500),
@@ -527,11 +527,11 @@ impl PerformanceCounter {
 impl Sampler {
     pub fn new(name: &str, interval: Duration, max_samples: usize) -> Self {
         Self {
-            name: name.to_string(),
-            interval,
-            samples: Vec::new(),
-            max_samples,
-            last_sample: Instant::now(),
+            _name: name.to_string(),
+            _interval: interval,
+            _samples: Vec::new(),
+            _max_samples: max_samples,
+            _last_sample: Instant::now(),
         }
     }
 }
