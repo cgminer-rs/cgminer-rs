@@ -78,11 +78,11 @@ impl SoftwareMiningCore {
     async fn create_software_devices(&self, config: &CoreConfig) -> Result<Vec<Box<dyn MiningDevice>>, CoreError> {
         let mut devices = Vec::new();
 
-        // 从配置中获取设备数量
-        let device_count = config.custom_params
-            .get("device_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(4) as u32;
+        // 从配置中获取设备数量（支持环境变量覆盖）
+        let device_count = self.get_device_count_from_config_with_params(config);
+
+        info!("配置中的设备数量: {}", device_count);
+        debug!("完整配置参数: {:?}", config.custom_params);
 
         // 获取算力范围
         let min_hashrate = config.custom_params
@@ -220,6 +220,76 @@ impl SoftwareMiningCore {
 
         Ok(())
     }
+
+    /// 从配置获取设备数量（带配置参数）
+    fn get_device_count_from_config_with_params(&self, config: &CoreConfig) -> u32 {
+        // 优先级：环境变量 > 配置文件 > 默认值
+
+        // 1. 检查环境变量
+        if let Ok(count_str) = std::env::var("CGMINER_SOFTWARE_DEVICE_COUNT") {
+            if let Ok(count) = count_str.parse::<u32>() {
+                if count > 0 && count <= 1000 {
+                    info!("从环境变量读取软算法设备数量: {}", count);
+                    return count;
+                } else {
+                    warn!("环境变量中的设备数量 {} 超出范围，使用配置文件值", count);
+                }
+            }
+        }
+
+        // 2. 从传入的配置参数读取
+        if let Some(device_count) = config.custom_params.get("device_count") {
+            if let Some(count) = device_count.as_u64() {
+                let count = count as u32;
+                if count > 0 && count <= 1000 {
+                    info!("从配置文件读取软算法设备数量: {}", count);
+                    return count;
+                } else {
+                    warn!("配置文件中的设备数量 {} 超出范围，使用默认值", count);
+                }
+            }
+        }
+
+        // 3. 使用默认值
+        info!("使用默认软算法设备数量: 4");
+        4u32
+    }
+
+    /// 从配置获取设备数量
+    fn get_device_count_from_config(&self) -> u32 {
+        // 优先级：环境变量 > 配置文件 > 默认值
+
+        // 1. 检查环境变量
+        if let Ok(count_str) = std::env::var("CGMINER_SOFTWARE_DEVICE_COUNT") {
+            if let Ok(count) = count_str.parse::<u32>() {
+                if count > 0 && count <= 1000 {
+                    info!("从环境变量读取软算法设备数量: {}", count);
+                    return count;
+                } else {
+                    warn!("环境变量中的设备数量 {} 超出范围，使用配置文件值", count);
+                }
+            }
+        }
+
+        // 2. 从配置文件读取
+        if let Some(config) = &self.config {
+            if let Some(device_count) = config.custom_params.get("device_count") {
+                if let Some(count) = device_count.as_u64() {
+                    let count = count as u32;
+                    if count > 0 && count <= 1000 {
+                        info!("从配置文件读取软算法设备数量: {}", count);
+                        return count;
+                    } else {
+                        warn!("配置文件中的设备数量 {} 超出范围，使用默认值", count);
+                    }
+                }
+            }
+        }
+
+        // 3. 使用默认值
+        info!("使用默认软算法设备数量: 4");
+        4u32
+    }
 }
 
 #[async_trait]
@@ -236,17 +306,13 @@ impl MiningCore for SoftwareMiningCore {
 
     /// 初始化核心
     async fn initialize(&mut self, config: CoreConfig) -> Result<(), CoreError> {
-        println!("🔧 [CORE DEBUG] 开始初始化软算法挖矿核心: {}", config.name);
-        println!("📋 [CORE DEBUG] 配置参数: {:?}", config.custom_params);
-        error!("🔧 [DEBUG] 开始初始化软算法挖矿核心: {}", config.name);
-        error!("📋 [DEBUG] 配置参数: {:?}", config.custom_params);
+        info!("开始初始化软算法挖矿核心: {}", config.name);
+        debug!("配置参数: {:?}", config.custom_params);
 
         // 验证配置
-        println!("✅ [CORE DEBUG] 验证配置...");
-        error!("✅ [DEBUG] 验证配置...");
+        debug!("验证配置...");
         self.validate_config(&config)?;
-        println!("✅ [CORE DEBUG] 配置验证通过");
-        error!("✅ [DEBUG] 配置验证通过");
+        debug!("配置验证通过");
 
         // 初始化性能优化器
         let mut perf_config = crate::performance::PerformanceConfig::default();
@@ -272,11 +338,9 @@ impl MiningCore for SoftwareMiningCore {
         }
 
         // 创建设备
-        println!("🏭 [CORE DEBUG] 开始创建软算法设备...");
-        error!("🏭 [DEBUG] 开始创建软算法设备...");
+        debug!("开始创建软算法设备...");
         let devices = self.create_software_devices(&config).await?;
-        println!("✅ [CORE DEBUG] 软算法设备创建完成，共创建 {} 个设备", devices.len());
-        error!("✅ [DEBUG] 软算法设备创建完成，共创建 {} 个设备", devices.len());
+        info!("软算法设备创建完成，共创建 {} 个设备", devices.len());
 
         // 存储设备
         {
@@ -311,11 +375,9 @@ impl MiningCore for SoftwareMiningCore {
             let devices = self.devices.lock().await;
             devices.len()
         };
-        println!("📊 [CORE DEBUG] 最终设备数量: {}", device_count);
-        error!("📊 [DEBUG] 最终设备数量: {}", device_count);
+        debug!("最终设备数量: {}", device_count);
 
-        println!("🎉 [CORE DEBUG] 软算法挖矿核心初始化完成");
-        error!("🎉 [DEBUG] 软算法挖矿核心初始化完成");
+        info!("软算法挖矿核心初始化完成");
         Ok(())
     }
 
@@ -388,14 +450,34 @@ impl MiningCore for SoftwareMiningCore {
     async fn scan_devices(&self) -> Result<Vec<DeviceInfo>, CoreError> {
         debug!("扫描软算法设备");
 
+        // 如果设备已经创建，返回现有设备信息
         let devices = self.devices.lock().await;
-        let mut device_infos = Vec::new();
-
-        for device in devices.values() {
-            match device.get_info().await {
-                Ok(info) => device_infos.push(info),
-                Err(e) => warn!("获取设备信息失败: {}", e),
+        if !devices.is_empty() {
+            let mut device_infos = Vec::new();
+            for device in devices.values() {
+                match device.get_info().await {
+                    Ok(info) => device_infos.push(info),
+                    Err(e) => warn!("获取设备信息失败: {}", e),
+                }
             }
+            return Ok(device_infos);
+        }
+        drop(devices);
+
+        // 如果设备未创建，根据配置生成应该创建的设备信息
+        let device_count = self.get_device_count_from_config();
+
+        info!("扫描到 {} 个软算法设备", device_count);
+
+        let mut device_infos = Vec::new();
+        for i in 0..device_count {
+            let device_info = DeviceInfo::new(
+                1000 + i, // 软算法设备ID范围: 1000-1999
+                format!("Software Device {}", i),
+                "software".to_string(),
+                i as u8,
+            );
+            device_infos.push(device_info);
         }
 
         Ok(device_infos)
@@ -450,25 +532,22 @@ impl MiningCore for SoftwareMiningCore {
 
     /// 提交工作到所有设备
     async fn submit_work(&mut self, work: Work) -> Result<(), CoreError> {
-        println!("🚀 [CORE WORK] 软算法核心接收到工作: {}", work.id);
         debug!("提交工作到所有软算法设备: {}", work.id);
 
         let mut devices = self.devices.lock().await;
-        println!("📊 [CORE WORK] 向 {} 个软算法设备分发工作", devices.len());
 
         for (device_id, device) in devices.iter_mut() {
             match device.submit_work(work.clone()).await {
                 Ok(()) => {
-                    println!("✅ [CORE WORK] 工作成功提交到设备 {}", device_id);
+                    debug!("工作成功提交到设备 {}", device_id);
                 }
                 Err(e) => {
-                    println!("❌ [CORE WORK] 向设备 {} 提交工作失败: {}", device_id, e);
                     warn!("向设备 {} 提交工作失败: {}", device_id, e);
                 }
             }
         }
 
-        println!("🎯 [CORE WORK] 工作分发完成");
+        debug!("工作分发完成");
         Ok(())
     }
 
@@ -477,25 +556,21 @@ impl MiningCore for SoftwareMiningCore {
         let mut results = Vec::new();
         let mut devices = self.devices.lock().await;
 
-        println!("🔍 [CORE RESULTS] 开始收集 {} 个设备的挖矿结果", devices.len());
-
         for (device_id, device) in devices.iter_mut() {
             match device.get_result().await {
                 Ok(Some(result)) => {
-                    println!("💎 [CORE RESULTS] 设备 {} 产生挖矿结果: nonce={:08x}", device_id, result.nonce);
+                    debug!("设备 {} 产生挖矿结果: nonce={:08x}", device_id, result.nonce);
                     results.push(result);
                 }
                 Ok(None) => {
                     // 没有结果 - 这是正常的
                 },
                 Err(e) => {
-                    println!("❌ [CORE RESULTS] 获取设备 {} 挖矿结果失败: {}", device_id, e);
-                    warn!("获取设备挖矿结果失败: {}", e);
+                    warn!("获取设备 {} 挖矿结果失败: {}", device_id, e);
                 }
             }
         }
 
-        println!("📊 [CORE RESULTS] 收集完成，共收集到 {} 个挖矿结果", results.len());
         debug!("收集到 {} 个挖矿结果", results.len());
         Ok(results)
     }
@@ -527,6 +602,8 @@ impl MiningCore for SoftwareMiningCore {
         Ok(healthy_devices >= health_threshold)
     }
 
+
+
     /// 验证配置
     fn validate_config(&self, config: &CoreConfig) -> Result<(), CoreError> {
         if config.name.is_empty() {
@@ -539,8 +616,44 @@ impl MiningCore for SoftwareMiningCore {
                 if count == 0 {
                     return Err(CoreError::config("软算法设备数量不能为0"));
                 }
+                if count > 1000 {
+                    return Err(CoreError::config("软算法设备数量不能超过1000"));
+                }
+
+                // 对于大量设备的警告
+                if count > 32 {
+                    warn!("配置了 {} 个软算法设备，这可能会消耗大量系统资源", count);
+                }
+
+                // 检查系统资源
                 if count > 64 {
-                    return Err(CoreError::config("软算法设备数量不能超过64"));
+                    let cpu_count = num_cpus::get();
+                    if count as usize > cpu_count * 4 {
+                        warn!("设备数量 ({}) 远超CPU核心数 ({})，可能影响性能", count, cpu_count);
+                    }
+                }
+            }
+        }
+
+        // 验证算力配置
+        if let Some(min_hashrate) = config.custom_params.get("min_hashrate") {
+            if let Some(max_hashrate) = config.custom_params.get("max_hashrate") {
+                if let (Some(min), Some(max)) = (min_hashrate.as_f64(), max_hashrate.as_f64()) {
+                    if min >= max {
+                        return Err(CoreError::config("最小算力不能大于等于最大算力"));
+                    }
+                    if min <= 0.0 || max <= 0.0 {
+                        return Err(CoreError::config("算力值必须大于0"));
+                    }
+                }
+            }
+        }
+
+        // 验证错误率
+        if let Some(error_rate) = config.custom_params.get("error_rate") {
+            if let Some(rate) = error_rate.as_f64() {
+                if rate < 0.0 || rate > 1.0 {
+                    return Err(CoreError::config("错误率必须在0.0到1.0之间"));
                 }
             }
         }
@@ -566,6 +679,8 @@ impl MiningCore for SoftwareMiningCore {
             custom_params,
         }
     }
+
+
 
     /// 关闭核心
     async fn shutdown(&mut self) -> Result<(), CoreError> {

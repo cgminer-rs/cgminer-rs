@@ -338,7 +338,6 @@ impl MiningDevice for SoftwareDevice {
 
     /// 提交工作
     async fn submit_work(&mut self, work: Work) -> Result<(), DeviceError> {
-        println!("📥 [DEVICE WORK] 软算法设备 {} 接收工作 {}", self.device_id(), work.id);
         debug!("向软算法设备 {} 提交工作 {}", self.device_id(), work.id);
 
         {
@@ -346,7 +345,6 @@ impl MiningDevice for SoftwareDevice {
             *current_work = Some(work);
         }
 
-        println!("✅ [DEVICE WORK] 软算法设备 {} 工作存储成功", self.device_id());
         Ok(())
     }
 
@@ -358,8 +356,6 @@ impl MiningDevice for SoftwareDevice {
         };
 
         if let Some(work) = work {
-            println!("⛏️  [DEVICE MINING] 设备 {} 开始挖矿工作 {}", self.device_id(), work.id);
-
             // 更新温度
             self.update_temperature()?;
 
@@ -367,10 +363,8 @@ impl MiningDevice for SoftwareDevice {
             let result = self.mine_work(&work).await?;
 
             if let Some(ref mining_result) = result {
-                println!("💎 [DEVICE MINING] 设备 {} 完成挖矿: nonce={:08x}, valid={}",
+                debug!("设备 {} 完成挖矿: nonce={:08x}, valid={}",
                     self.device_id(), mining_result.nonce, mining_result.meets_target);
-            } else {
-                println!("⏳ [DEVICE MINING] 设备 {} 挖矿完成，无有效结果", self.device_id());
             }
 
             Ok(result)

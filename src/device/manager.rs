@@ -47,6 +47,12 @@ impl DeviceManager {
         }
     }
 
+    /// 设置活跃核心ID列表
+    pub async fn set_active_cores(&mut self, core_ids: Vec<String>) {
+        let mut factory = self.device_factory.lock().await;
+        factory.set_active_cores(core_ids);
+    }
+
     /// 初始化设备管理器
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
         info!("🔧 初始化设备管理器");
@@ -69,63 +75,129 @@ impl DeviceManager {
         info!("🔧 创建设备");
 
         let factory = self.device_factory.lock().await;
-        let available_types = factory.get_available_device_types();
+        let available_cores = factory.get_available_cores().await.map_err(|e| {
+            DeviceError::InitializationFailed {
+                device_id: 0,
+                reason: format!("获取可用核心失败: {}", e),
+            }
+        })?;
         drop(factory);
 
-        if available_types.is_empty() {
-            warn!("⚠️ 没有可用的设备类型");
+        if available_cores.is_empty() {
+            warn!("⚠️ 没有可用的挖矿核心");
             return Ok(());
         }
 
-        info!("📋 可用设备类型: {:?}", available_types);
+        info!("📋 可用挖矿核心: {:?}", available_cores.iter().map(|c| &c.name).collect::<Vec<_>>());
 
-        // 为每种可用类型创建设备
-        let mut device_id = 1u32;
-        for device_type in available_types {
-            match self.create_device_of_type(&device_type, device_id).await {
-                Ok(device) => {
-                    // 添加到设备列表
-                    let mut devices = self.devices.write().await;
-                    devices.insert(device_id, Arc::new(Mutex::new(device)));
-
-                    // 创建设备信息
-                    let device_info = DeviceInfo {
-                        id: device_id,
-                        name: format!("{}-{}", device_type, device_id),
-                        device_type: device_type.clone(),
-                        chain_id: 0,
-                        chip_count: 1,
-                        status: crate::device::DeviceStatus::Idle,
-                        temperature: None,
-                        fan_speed: None,
-                        voltage: None,
-                        frequency: None,
-                        hashrate: 0.0,
-                        accepted_shares: 0,
-                        rejected_shares: 0,
-                        hardware_errors: 0,
-                        uptime: Duration::from_secs(0),
-                        last_share_time: None,
-                        created_at: std::time::SystemTime::now(),
-                        updated_at: std::time::SystemTime::now(),
-                    };
-
-                    // 添加到设备信息缓存
-                    let mut info_cache = self.device_info.write().await;
-                    info_cache.insert(device_id, device_info);
-
-                    // 添加到统计信息
-                    let mut stats = self.device_stats.write().await;
-                    stats.insert(device_id, DeviceStats::new());
-
-                    info!("✅ 设备创建成功: {} (ID: {})", device_type, device_id);
-                    device_id += 1;
+        // 为每个核心扫描并创建设备
+        for core in available_cores {
+            match self.create_devices_for_core(&core).await {
+                Ok(device_count) => {
+                    info!("✅ 核心 {} 创建了 {} 个设备", core.name, device_count);
                 }
                 Err(e) => {
-                    warn!("⚠️ 创建设备失败: {} - {}", device_type, e);
+                    error!("❌ 核心 {} 设备创建失败: {}", core.name, e);
                 }
             }
         }
+
+        let total_device_count = self.devices.read().await.len();
+        info!("🎯 设备创建完成，共创建 {} 个设备", total_device_count);
+
+        Ok(())
+    }
+
+    /// 为指定核心创建设备
+    async fn create_devices_for_core(&mut self, core: &cgminer_core::CoreInfo) -> Result<u32, DeviceError> {
+        info!("🔍 为核心 {} 扫描设备", core.name);
+
+        // 获取核心实例并扫描设备
+        let factory = self.device_factory.lock().await;
+        let scanned_devices = factory.scan_devices_for_core(&core.name).await.map_err(|e| {
+            DeviceError::InitializationFailed {
+                device_id: 0,
+                reason: format!("扫描核心 {} 的设备失败: {}", core.name, e),
+            }
+        })?;
+        drop(factory);
+
+        if scanned_devices.is_empty() {
+            warn!("⚠️ 核心 {} 没有扫描到设备", core.name);
+            return Ok(0);
+        }
+
+        info!("📋 核心 {} 扫描到 {} 个设备", core.name, scanned_devices.len());
+
+        let mut created_count = 0u32;
+        for device_info in scanned_devices {
+            match self.create_device_from_info(device_info).await {
+                Ok(()) => {
+                    created_count += 1;
+                }
+                Err(e) => {
+                    error!("❌ 创建设备失败: {}", e);
+                }
+            }
+        }
+
+        Ok(created_count)
+    }
+
+    /// 从设备信息创建设备实例
+    async fn create_device_from_info(&mut self, device_info: cgminer_core::DeviceInfo) -> Result<(), DeviceError> {
+        let device_id = device_info.id;
+        let device_name = device_info.name.clone();
+        let device_type = device_info.device_type.clone();
+
+        info!("🔧 创建设备: ID={}, 名称={}, 类型={}",
+              device_id, device_name, device_type);
+
+        // 通过工厂创建设备
+        let factory = self.device_factory.lock().await;
+        let device = factory.create_device_from_info(device_info.clone()).await.map_err(|e| {
+            DeviceError::InitializationFailed {
+                device_id,
+                reason: format!("创建设备实例失败: {}", e),
+            }
+        })?;
+        drop(factory);
+
+        // 添加到设备列表
+        let mut devices = self.devices.write().await;
+        devices.insert(device_id, Arc::new(Mutex::new(device)));
+
+        // 转换设备信息格式
+        let local_device_info = crate::device::DeviceInfo {
+            id: device_info.id,
+            name: device_info.name,
+            device_type: device_info.device_type,
+            chain_id: device_info.chain_id,
+            chip_count: device_info.chip_count.unwrap_or(1),
+            status: crate::device::DeviceStatus::Idle,
+            temperature: device_info.temperature,
+            fan_speed: device_info.fan_speed,
+            voltage: device_info.voltage,
+            frequency: device_info.frequency,
+            hashrate: 0.0,
+            accepted_shares: 0,
+            rejected_shares: 0,
+            hardware_errors: 0,
+            uptime: Duration::from_secs(0),
+            last_share_time: None,
+            created_at: device_info.created_at,
+            updated_at: device_info.updated_at,
+        };
+
+        // 缓存设备信息
+        let mut info_cache = self.device_info.write().await;
+        info_cache.insert(device_id, local_device_info);
+
+        // 初始化设备统计
+        let mut stats_cache = self.device_stats.write().await;
+        stats_cache.insert(device_id, DeviceStats::new());
+
+        info!("✅ 设备创建成功: ID={}, 名称={}", device_id, device_name);
 
         Ok(())
     }

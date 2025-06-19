@@ -373,7 +373,13 @@ impl F2PoolVirtualMiner {
         log_info("Initializing virtual mining devices...");
         log_info("Performing SHA-256 performance benchmarks...");
 
-        for i in 0..4 {
+        // 从环境变量或默认值获取设备数量
+        let device_count = std::env::var("CGMINER_DEVICE_COUNT")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(4); // 默认4个设备
+
+        for i in 0..device_count {
             let device = Arc::new(VirtualMiningDevice::new(i));
             total_hashrate += device.hashrate;
             devices.push(device);

@@ -252,6 +252,19 @@ impl CoreRegistry {
         }
     }
 
+    /// 扫描指定核心的设备
+    pub async fn scan_devices(&self, core_id: &str) -> Result<Vec<crate::DeviceInfo>, CoreError> {
+        let active_cores = self.active_cores.read().await;
+
+        if let Some(core) = active_cores.get(core_id) {
+            core.scan_devices().await.map_err(|e| {
+                CoreError::runtime(format!("Failed to scan devices from core '{}': {}", core_id, e))
+            })
+        } else {
+            Err(CoreError::runtime(format!("核心实例 '{}' 不存在", core_id)))
+        }
+    }
+
     /// 关闭所有核心实例
     pub async fn shutdown_all(&self) -> Result<(), CoreError> {
         let core_ids: Vec<String> = {

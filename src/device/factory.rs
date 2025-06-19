@@ -4,21 +4,19 @@
 
 use crate::device::{DeviceConfig, MiningDevice, DeviceInfo};
 use crate::error::DeviceError;
-use cgminer_core::{CoreRegistry, CoreConfig};
+use cgminer_core::CoreRegistry;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::{info, warn, debug};
 
 /// 统一设备工厂
 ///
-/// 负责创建不同类型的挖矿设备，通过核心注册表管理底层核心库
+/// 负责创建不同类型的挖矿设备，使用挖矿管理器提供的核心实例
 pub struct UnifiedDeviceFactory {
     /// 核心注册表
     core_registry: Arc<CoreRegistry>,
-    /// BTC软算法核心ID
-    btc_core_id: Option<String>,
-    /// Maijie L7 ASIC核心ID
-    maijie_l7_core_id: Option<String>,
+    /// 活跃核心ID列表（由挖矿管理器提供）
+    active_core_ids: Vec<String>,
     /// 下一个设备ID
     next_device_id: Arc<Mutex<u32>>,
 }
@@ -28,46 +26,29 @@ impl UnifiedDeviceFactory {
     pub fn new(core_registry: Arc<CoreRegistry>) -> Self {
         Self {
             core_registry,
-            btc_core_id: None,
-            maijie_l7_core_id: None,
+            active_core_ids: Vec::new(),
             next_device_id: Arc::new(Mutex::new(1)),
         }
     }
 
-    /// 初始化工厂，注册可用的核心
+    /// 设置活跃核心ID列表（由挖矿管理器提供）
+    pub fn set_active_cores(&mut self, core_ids: Vec<String>) {
+        self.active_core_ids = core_ids;
+        info!("🏭 设备工厂接收到活跃核心: {:?}", self.active_core_ids);
+    }
+
+    /// 初始化工厂
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
         info!("🏭 初始化统一设备工厂...");
 
-        // 尝试注册BTC软算法核心
-        match self.register_btc_software_core().await {
-            Ok(core_id) => {
-                self.btc_core_id = Some(core_id.clone());
-                info!("✅ BTC软算法核心注册成功: {}", core_id);
-            }
-            Err(e) => {
-                warn!("⚠️ BTC软算法核心注册失败: {}", e);
-            }
-        }
-
-        // 尝试注册Maijie L7 ASIC核心
-        match self.register_maijie_l7_core().await {
-            Ok(core_id) => {
-                self.maijie_l7_core_id = Some(core_id.clone());
-                info!("✅ Maijie L7 ASIC核心注册成功: {}", core_id);
-            }
-            Err(e) => {
-                warn!("⚠️ Maijie L7 ASIC核心注册失败: {}", e);
-            }
-        }
-
-        if self.btc_core_id.is_none() && self.maijie_l7_core_id.is_none() {
+        if self.active_core_ids.is_empty() {
             return Err(DeviceError::InitializationFailed {
                 device_id: 0,
-                reason: "没有可用的核心库".to_string(),
+                reason: "没有可用的活跃核心".to_string(),
             });
         }
 
-        info!("🎉 设备工厂初始化完成");
+        info!("🎉 设备工厂初始化完成，活跃核心数量: {}", self.active_core_ids.len());
         Ok(())
     }
 
@@ -96,15 +77,282 @@ impl UnifiedDeviceFactory {
     pub fn get_available_device_types(&self) -> Vec<String> {
         let mut types = Vec::new();
 
-        if self.btc_core_id.is_some() {
+        if self.active_core_ids.iter().any(|id| id.contains("software") || id.contains("btc")) {
             types.push("btc-software".to_string());
         }
 
-        if self.maijie_l7_core_id.is_some() {
+        if self.active_core_ids.iter().any(|id| id.contains("asic") || id.contains("maijie")) {
             types.push("maijie-l7".to_string());
         }
 
         types
+    }
+
+    /// 获取可用的核心信息
+    pub async fn get_available_cores(&self) -> Result<Vec<cgminer_core::CoreInfo>, cgminer_core::CoreError> {
+        let mut cores = Vec::new();
+
+        // 获取已注册的核心工厂信息
+        let core_infos = self.core_registry.list_factories().await?;
+
+        for core_info in core_infos {
+            // 检查是否有对应的活跃核心
+            if self.active_core_ids.iter().any(|id| id.contains("software") || id.contains("btc")) &&
+               core_info.name == "Software Mining Core" {
+                cores.push(core_info);
+            } else if self.active_core_ids.iter().any(|id| id.contains("asic") || id.contains("maijie")) &&
+                      core_info.name == "ASIC Mining Core" {
+                cores.push(core_info);
+            }
+        }
+
+        Ok(cores)
+    }
+
+    /// 为指定核心扫描设备
+    pub async fn scan_devices_for_core(&self, core_name: &str) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        match core_name {
+            "Software Mining Core" => {
+                // 查找软算法核心ID
+                if let Some(core_id) = self.active_core_ids.iter()
+                    .find(|id| id.contains("software") || id.contains("btc")) {
+                    self.scan_devices_from_core(core_id).await
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            "ASIC Mining Core" => {
+                // 查找ASIC核心ID
+                if let Some(core_id) = self.active_core_ids.iter()
+                    .find(|id| id.contains("asic") || id.contains("maijie")) {
+                    self.scan_devices_from_core(core_id).await
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    /// 从核心实例扫描设备
+    async fn scan_devices_from_core(&self, core_id: &str) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        // 通过核心注册表调用核心的scan_devices方法
+        info!("从核心 {} 扫描设备", core_id);
+
+        match self.core_registry.scan_devices(core_id).await {
+            Ok(devices) => {
+                info!("核心 {} 扫描到 {} 个设备", core_id, devices.len());
+                Ok(devices)
+            }
+            Err(e) => {
+                warn!("核心 {} 扫描设备失败: {}", core_id, e);
+                // 如果核心扫描失败，回退到生成设备信息的方式
+                if core_id.starts_with("btc-software") {
+                    self.generate_software_device_infos().await
+                } else if core_id.starts_with("maijie-l7") {
+                    self.generate_asic_device_infos().await
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+        }
+    }
+
+    /// 生成软算法设备信息
+    async fn generate_software_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        let mut devices = Vec::new();
+
+        // 从配置文件读取设备数量，如果没有配置则使用默认值
+        let device_count = self.get_software_device_count().await;
+
+        info!("生成 {} 个软算法设备信息", device_count);
+
+        for i in 0..device_count {
+            let device_info = cgminer_core::DeviceInfo::new(
+                Self::allocate_software_device_id(i), // 使用统一的ID分配策略
+                format!("Software Device {}", i),
+                "software".to_string(),
+                i as u8,
+            );
+            devices.push(device_info);
+        }
+
+        Ok(devices)
+    }
+
+    /// 生成ASIC设备信息
+    async fn generate_asic_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        let mut devices = Vec::new();
+
+        // 从配置文件读取链数量，如果没有配置则使用默认值
+        let chain_count = self.get_asic_chain_count().await;
+
+        info!("生成 {} 个ASIC设备信息", chain_count);
+
+        for i in 0..chain_count {
+            let device_info = cgminer_core::DeviceInfo::new(
+                Self::allocate_asic_device_id(i), // 使用统一的ID分配策略
+                format!("ASIC Chain {}", i),
+                "asic".to_string(),
+                i as u8,
+            );
+            devices.push(device_info);
+        }
+
+        Ok(devices)
+    }
+
+    /// 获取软算法设备数量配置
+    async fn get_software_device_count(&self) -> u32 {
+        // 优先级：环境变量 > 核心配置 > 默认值
+
+        // 1. 检查环境变量
+        if let Ok(count_str) = std::env::var("CGMINER_SOFTWARE_DEVICE_COUNT") {
+            if let Ok(count) = count_str.parse::<u32>() {
+                if count > 0 && count <= 1000 {
+                    info!("从环境变量读取软算法设备数量: {}", count);
+                    return count;
+                } else {
+                    warn!("环境变量中的设备数量 {} 超出范围，使用默认值", count);
+                }
+            }
+        }
+
+        // 2. 从活跃核心配置读取（如果有的话）
+        if self.active_core_ids.iter().any(|id| id.contains("software") || id.contains("btc")) {
+            // TODO: 通过核心注册表获取核心配置
+            // 这里暂时使用默认值，后续可以实现配置读取
+        }
+
+        // 3. 使用默认值
+        4
+    }
+
+    /// 获取ASIC链数量配置
+    async fn get_asic_chain_count(&self) -> u32 {
+        // 优先级：环境变量 > 核心配置 > 默认值
+
+        // 1. 检查环境变量
+        if let Ok(count_str) = std::env::var("CGMINER_ASIC_CHAIN_COUNT") {
+            if let Ok(count) = count_str.parse::<u32>() {
+                if count > 0 && count <= 1000 {
+                    info!("从环境变量读取ASIC链数量: {}", count);
+                    return count;
+                } else {
+                    warn!("环境变量中的链数量 {} 超出范围，使用默认值", count);
+                }
+            }
+        }
+
+        // 2. 从活跃核心配置读取（如果有的话）
+        if self.active_core_ids.iter().any(|id| id.contains("asic") || id.contains("maijie")) {
+            // TODO: 通过核心注册表获取核心配置
+            // 这里暂时使用默认值，后续可以实现配置读取
+        }
+
+        // 3. 使用默认值
+        3
+    }
+
+    /// 分配软算法设备ID
+    /// ID范围: 1000-1999 (支持最多1000个软算法设备)
+    fn allocate_software_device_id(index: u32) -> u32 {
+        const SOFTWARE_DEVICE_ID_BASE: u32 = 1000;
+        const SOFTWARE_DEVICE_ID_MAX: u32 = 1999;
+
+        let device_id = SOFTWARE_DEVICE_ID_BASE + index;
+        if device_id > SOFTWARE_DEVICE_ID_MAX {
+            warn!("软算法设备索引 {} 超出ID范围，使用基础ID", index);
+            SOFTWARE_DEVICE_ID_BASE
+        } else {
+            device_id
+        }
+    }
+
+    /// 分配ASIC设备ID
+    /// ID范围: 2000-2999 (支持最多1000个ASIC设备)
+    fn allocate_asic_device_id(index: u32) -> u32 {
+        const ASIC_DEVICE_ID_BASE: u32 = 2000;
+        const ASIC_DEVICE_ID_MAX: u32 = 2999;
+
+        let device_id = ASIC_DEVICE_ID_BASE + index;
+        if device_id > ASIC_DEVICE_ID_MAX {
+            warn!("ASIC设备索引 {} 超出ID范围，使用基础ID", index);
+            ASIC_DEVICE_ID_BASE
+        } else {
+            device_id
+        }
+    }
+
+    /// 从设备信息创建设备实例
+    pub async fn create_device_from_info(&self, device_info: cgminer_core::DeviceInfo) -> Result<Box<dyn MiningDevice>, DeviceError> {
+        debug!("🔧 从设备信息创建设备: ID={}, 名称={}, 类型={}",
+               device_info.id, device_info.name, device_info.device_type);
+
+        // 根据设备类型选择对应的核心
+        let (core_id, device_config) = match device_info.device_type.as_str() {
+            "software" => {
+                let core_id = self.active_core_ids.iter()
+                    .find(|id| id.contains("software") || id.contains("btc"))
+                    .ok_or_else(|| {
+                        DeviceError::InitializationFailed {
+                            device_id: device_info.id,
+                            reason: "BTC软算法核心不可用".to_string(),
+                        }
+                    })?;
+
+                let device_config = DeviceConfig {
+                    chain_id: device_info.chain_id,
+                    enabled: true,
+                    frequency: 600,
+                    voltage: 12,
+                    auto_tune: false,
+                    chip_count: 1,
+                    temperature_limit: 85.0,
+                    fan_speed: None,
+                };
+
+                (core_id.clone(), device_config)
+            }
+            "asic" => {
+                let core_id = self.active_core_ids.iter()
+                    .find(|id| id.contains("asic") || id.contains("maijie"))
+                    .ok_or_else(|| {
+                        DeviceError::InitializationFailed {
+                            device_id: device_info.id,
+                            reason: "Maijie L7核心不可用".to_string(),
+                        }
+                    })?;
+
+                let device_config = DeviceConfig {
+                    chain_id: device_info.chain_id,
+                    enabled: true,
+                    frequency: 650,
+                    voltage: 900,
+                    auto_tune: true,
+                    chip_count: 126,
+                    temperature_limit: 85.0,
+                    fan_speed: Some(70),
+                };
+
+                (core_id.clone(), device_config)
+            }
+            _ => {
+                return Err(DeviceError::InvalidConfig {
+                    reason: format!("不支持的设备类型: {}", device_info.device_type),
+                });
+            }
+        };
+
+        // 创建设备代理，使用设备信息中的ID
+        let device_proxy = CoreDeviceProxy::new_with_info(
+            device_info,
+            core_id,
+            self.core_registry.clone(),
+            device_config,
+        ).await?;
+
+        Ok(Box::new(device_proxy))
     }
 
     /// 创建BTC软算法设备
@@ -112,12 +360,14 @@ impl UnifiedDeviceFactory {
         &self,
         config: DeviceConfig,
     ) -> Result<Box<dyn MiningDevice>, DeviceError> {
-        let core_id = self.btc_core_id.as_ref().ok_or_else(|| {
-            DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: "BTC软算法核心不可用".to_string(),
-            }
-        })?;
+        let core_id = self.active_core_ids.iter()
+            .find(|id| id.contains("software") || id.contains("btc"))
+            .ok_or_else(|| {
+                DeviceError::InitializationFailed {
+                    device_id: 0,
+                    reason: "BTC软算法核心不可用".to_string(),
+                }
+            })?;
 
         debug!("创建BTC软算法设备，使用核心: {}", core_id);
 
@@ -146,12 +396,14 @@ impl UnifiedDeviceFactory {
         &self,
         config: DeviceConfig,
     ) -> Result<Box<dyn MiningDevice>, DeviceError> {
-        let core_id = self.maijie_l7_core_id.as_ref().ok_or_else(|| {
-            DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: "Maijie L7核心不可用".to_string(),
-            }
-        })?;
+        let core_id = self.active_core_ids.iter()
+            .find(|id| id.contains("asic") || id.contains("maijie"))
+            .ok_or_else(|| {
+                DeviceError::InitializationFailed {
+                    device_id: 0,
+                    reason: "Maijie L7核心不可用".to_string(),
+                }
+            })?;
 
         debug!("创建Maijie L7设备，使用核心: {}", core_id);
 
@@ -175,88 +427,8 @@ impl UnifiedDeviceFactory {
         Ok(Box::new(device_proxy))
     }
 
-    /// 注册BTC软算法核心
-    async fn register_btc_software_core(&self) -> Result<String, DeviceError> {
-        // 创建软算法核心工厂
-        let factory = cgminer_s_btc_core::create_factory();
 
-        self.core_registry.register_factory("btc-software".to_string(), factory).await
-            .map_err(|e| DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: format!("注册BTC软算法核心失败: {}", e),
-            })?;
 
-        // 创建核心实例
-        let core_config = CoreConfig {
-            name: "cgminer-s-btc-core".to_string(),
-            enabled: true,
-            devices: vec![], // 设备配置将在核心内部创建
-            custom_params: {
-                let mut params = std::collections::HashMap::new();
-                params.insert("device_count".to_string(), serde_json::Value::Number(serde_json::Number::from(4)));
-                params.insert("min_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(1000000.0).unwrap()));
-                params.insert("max_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(10000000.0).unwrap()));
-                params.insert("error_rate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(0.01).unwrap()));
-                params.insert("batch_size".to_string(), serde_json::Value::Number(serde_json::Number::from(1000)));
-                params.insert("work_timeout_ms".to_string(), serde_json::Value::Number(serde_json::Number::from(5000)));
-                params
-            },
-        };
-
-        let core_id = self.core_registry.create_core("btc-software", core_config).await
-            .map_err(|e| DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: format!("创建BTC软算法核心失败: {}", e),
-            })?;
-
-        Ok(core_id)
-    }
-
-    /// 注册Maijie L7 ASIC核心
-    #[cfg(feature = "maijie-l7")]
-    async fn register_maijie_l7_core(&self) -> Result<String, DeviceError> {
-        // 创建ASIC核心工厂
-        let factory = cgminer_a_maijie_l7_core::create_factory();
-
-        self.core_registry.register_factory("maijie-l7".to_string(), factory).await
-            .map_err(|e| DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: format!("注册Maijie L7核心失败: {}", e),
-            })?;
-
-        // 创建核心实例
-        let core_config = CoreConfig {
-            name: "cgminer-a-maijie-l7-core".to_string(),
-            enabled: true,
-            devices: vec![], // 设备配置将在核心内部创建
-            custom_params: {
-                let mut params = std::collections::HashMap::new();
-                params.insert("chain_count".to_string(), serde_json::Value::Number(serde_json::Number::from(3)));
-                params.insert("spi_speed".to_string(), serde_json::Value::Number(serde_json::Number::from(1000000)));
-                params.insert("uart_baud".to_string(), serde_json::Value::Number(serde_json::Number::from(115200)));
-                params.insert("auto_detect".to_string(), serde_json::Value::Bool(true));
-                params.insert("power_limit".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(3000.0).unwrap()));
-                params.insert("cooling_mode".to_string(), serde_json::Value::String("auto".to_string()));
-                params
-            },
-        };
-
-        let core_id = self.core_registry.create_core("maijie-l7", core_config).await
-            .map_err(|e| DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: format!("创建Maijie L7核心失败: {}", e),
-            })?;
-
-        Ok(core_id)
-    }
-
-    /// 注册Maijie L7 ASIC核心 (未启用特性时的占位符)
-    #[cfg(not(feature = "maijie-l7"))]
-    async fn register_maijie_l7_core(&self) -> Result<String, DeviceError> {
-        Err(DeviceError::UnsupportedDevice {
-            device_type: "maijie-l7".to_string(),
-        })
-    }
 }
 
 /// 核心设备代理
@@ -285,6 +457,50 @@ impl CoreDeviceProxy {
             core_id,
             device_cache: Arc::new(tokio::sync::RwLock::new(None)),
         };
+
+        // 初始化设备
+        proxy.initialize_device().await?;
+
+        Ok(proxy)
+    }
+
+    /// 从设备信息创建新的设备代理
+    pub async fn new_with_info(
+        device_info: cgminer_core::DeviceInfo,
+        core_id: String,
+        _core_registry: Arc<CoreRegistry>,
+        _config: DeviceConfig,
+    ) -> Result<Self, DeviceError> {
+        let proxy = Self {
+            device_id: device_info.id,
+            core_id,
+            device_cache: Arc::new(tokio::sync::RwLock::new(None)),
+        };
+
+        // 缓存设备信息
+        {
+            let mut cache = proxy.device_cache.write().await;
+            *cache = Some(crate::device::DeviceInfo {
+                id: device_info.id,
+                name: device_info.name,
+                device_type: device_info.device_type,
+                chain_id: device_info.chain_id,
+                chip_count: device_info.chip_count.unwrap_or(1),
+                status: crate::device::DeviceStatus::Idle,
+                temperature: device_info.temperature,
+                fan_speed: device_info.fan_speed,
+                voltage: device_info.voltage,
+                frequency: device_info.frequency,
+                hashrate: 0.0,
+                accepted_shares: 0,
+                rejected_shares: 0,
+                hardware_errors: 0,
+                uptime: std::time::Duration::from_secs(0),
+                last_share_time: None,
+                created_at: device_info.created_at,
+                updated_at: device_info.updated_at,
+            });
+        }
 
         // 初始化设备
         proxy.initialize_device().await?;

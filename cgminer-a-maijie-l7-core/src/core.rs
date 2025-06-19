@@ -300,14 +300,41 @@ impl MiningCore for AsicMiningCore {
     async fn scan_devices(&self) -> Result<Vec<DeviceInfo>, CoreError> {
         debug!("扫描ASIC设备");
 
+        // 如果设备已经创建，返回现有设备信息
         let devices = self.devices.lock().await;
-        let mut device_infos = Vec::new();
-
-        for device in devices.values() {
-            match device.get_info().await {
-                Ok(info) => device_infos.push(info),
-                Err(e) => warn!("获取设备信息失败: {}", e),
+        if !devices.is_empty() {
+            let mut device_infos = Vec::new();
+            for device in devices.values() {
+                match device.get_info().await {
+                    Ok(info) => device_infos.push(info),
+                    Err(e) => warn!("获取设备信息失败: {}", e),
+                }
             }
+            return Ok(device_infos);
+        }
+        drop(devices);
+
+        // 如果设备未创建，根据配置生成应该创建的设备信息
+        let chain_count = if let Some(config) = &self.config {
+            config.custom_params
+                .get("chain_count")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(3) as u32
+        } else {
+            3u32 // 默认链数量
+        };
+
+        info!("扫描到 {} 个ASIC设备链", chain_count);
+
+        let mut device_infos = Vec::new();
+        for i in 0..chain_count {
+            let device_info = DeviceInfo::new(
+                2000 + i, // ASIC设备ID范围: 2000-2999
+                format!("ASIC Chain {}", i),
+                "asic".to_string(),
+                i as u8,
+            );
+            device_infos.push(device_info);
         }
 
         Ok(device_infos)
@@ -408,8 +435,42 @@ impl MiningCore for AsicMiningCore {
                 if count == 0 {
                     return Err(CoreError::config("ASIC链数量不能为0"));
                 }
+                if count > 1000 {
+                    return Err(CoreError::config("ASIC链数量不能超过1000"));
+                }
+
+                // 对于大量链的警告
                 if count > 16 {
-                    return Err(CoreError::config("ASIC链数量不能超过16"));
+                    warn!("配置了 {} 个ASIC链，请确保硬件支持", count);
+                }
+
+                // 检查功耗限制
+                if let Some(power_limit) = config.custom_params.get("power_limit") {
+                    if let Some(power) = power_limit.as_f64() {
+                        let estimated_power = count as f64 * 3500.0; // 假设每链3.5kW
+                        if estimated_power > power * 1.2 {
+                            warn!("估计功耗 ({:.1}W) 可能超过功耗限制 ({:.1}W)", estimated_power, power);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 验证SPI速度
+        if let Some(spi_speed) = config.custom_params.get("spi_speed") {
+            if let Some(speed) = spi_speed.as_u64() {
+                if speed < 100_000 || speed > 50_000_000 {
+                    return Err(CoreError::config("SPI速度必须在100kHz到50MHz之间"));
+                }
+            }
+        }
+
+        // 验证UART波特率
+        if let Some(uart_baud) = config.custom_params.get("uart_baud") {
+            if let Some(baud) = uart_baud.as_u64() {
+                let valid_bauds = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
+                if !valid_bauds.contains(&baud) {
+                    return Err(CoreError::config("UART波特率必须是标准值之一"));
                 }
             }
         }

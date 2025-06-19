@@ -51,6 +51,8 @@ pub struct MiningManager {
     result_process_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// 算力更新任务句柄
     hashmeter_update_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// 核心结果收集任务句柄
+    core_result_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// 运行状态
     running: Arc<RwLock<bool>>,
 }
@@ -107,6 +109,7 @@ impl MiningManager {
             work_dispatch_handle: Arc::new(Mutex::new(None)),
             result_process_handle: Arc::new(Mutex::new(None)),
             hashmeter_update_handle: Arc::new(Mutex::new(None)),
+            core_result_handle: Arc::new(Mutex::new(None)),
             running: Arc::new(RwLock::new(false)),
         })
     }
@@ -192,9 +195,20 @@ impl MiningManager {
             timestamp: SystemTime::now(),
         }).await;
 
-        // 初始化设备管理器
+        // 先启动挖矿核心（创建核心实例）
+        self.start_cores().await?;
+
+        // 获取活跃核心ID并传递给设备工厂
+        let active_core_ids = self.core_registry.list_active_cores().await
+            .map_err(|e| MiningError::CoreError(format!("获取活跃核心列表失败: {}", e)))?;
+
+        // 初始化设备管理器（传递核心ID）
         {
             let mut device_manager = self.device_manager.lock().await;
+
+            // 设置设备工厂的活跃核心
+            device_manager.set_active_cores(active_core_ids).await;
+
             device_manager.initialize().await?;
             device_manager.start().await?;
         }
@@ -210,9 +224,6 @@ impl MiningManager {
             let monitoring_system = self.monitoring_system.lock().await;
             monitoring_system.start().await?;
         }
-
-        // 启动挖矿核心
-        self.start_cores().await?;
 
         // 启动算力计量器
         self.start_hashmeter().await?;
@@ -401,7 +412,7 @@ impl MiningManager {
                                     if let Err(e) = sender.send(work_item) {
                                         warn!("Failed to send work to dispatcher: {}", e);
                                     } else {
-                                        debug!("Work sent to dispatcher");
+                                        info!("Work sent to dispatcher");
                                     }
                                 }
                                 Err(e) => {
@@ -454,7 +465,7 @@ impl MiningManager {
                                         match core_registry.submit_work_to_core(core_id, core_work).await {
                                             Ok(()) => {
                                                 work_submitted = true;
-                                                debug!("Work successfully submitted to core: {}", core_id);
+                                                info!("Work successfully submitted to core: {}", core_id);
                                             }
                                             Err(e) => {
                                                 warn!("Failed to submit work to core {}: {}", core_id, e);
@@ -545,7 +556,7 @@ impl MiningManager {
         let result_sender = self.result_sender.clone();
         let stats = self.stats.clone();
 
-        let _handle = tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             let mut interval = interval(Duration::from_millis(100)); // 每100ms检查一次结果
 
             while *running.read().await {
@@ -554,6 +565,9 @@ impl MiningManager {
                 // 从核心注册表获取所有活跃核心并收集结果
                 match core_registry.list_active_cores().await {
                     Ok(active_core_ids) => {
+                        if !active_core_ids.is_empty() {
+                            debug!("Collecting results from {} active cores", active_core_ids.len());
+                        }
                         for core_id in active_core_ids {
                             // 从核心注册表收集结果
                             match core_registry.collect_results_from_core(&core_id).await {
@@ -643,14 +657,44 @@ impl MiningManager {
             }
         });
 
-        // 存储任务句柄（需要添加到结构体中）
-        // *self.core_result_handle.lock().await = Some(handle);
+        // 存储任务句柄
+        *self.core_result_handle.lock().await = Some(handle);
         Ok(())
     }
 
     /// 启动挖矿核心
     async fn start_cores(&self) -> Result<(), MiningError> {
         info!("启动挖矿核心");
+
+        // 首先检查是否已经有活跃的核心（由设备管理器创建）
+        match self.core_registry.list_active_cores().await {
+            Ok(active_cores) => {
+                if !active_cores.is_empty() {
+                    info!("发现已存在的活跃核心: {:?}", active_cores);
+
+                    // 启动所有已存在的核心
+                    for core_id in &active_cores {
+                        match self.core_registry.start_core(core_id).await {
+                            Ok(()) => {
+                                info!("🚀 核心启动成功: {}", core_id);
+                            }
+                            Err(e) => {
+                                warn!("⚠️ 核心启动失败: {}: {}", core_id, e);
+                            }
+                        }
+                    }
+
+                    info!("所有挖矿核心启动完成");
+                    return Ok(());
+                }
+            }
+            Err(e) => {
+                warn!("获取活跃核心列表失败: {}", e);
+            }
+        }
+
+        // 如果没有活跃的核心，则创建新的核心
+        info!("没有发现活跃核心，开始创建新核心");
 
         // 获取启用的核心类型
         let enabled_cores = &self.full_config.cores.enabled_cores;
@@ -829,6 +873,11 @@ impl MiningManager {
 
         // 停止结果处理
         if let Some(handle) = self.result_process_handle.lock().await.take() {
+            handle.abort();
+        }
+
+        // 停止核心结果收集
+        if let Some(handle) = self.core_result_handle.lock().await.take() {
             handle.abort();
         }
     }
