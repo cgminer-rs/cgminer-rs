@@ -129,7 +129,7 @@ debug = true
 # 主程序保持基础配置，由各个核心自行处理优化
 
 [features]
-default = []
+default = ["cpu-btc"]
 
 # 核心特性
 cpu-btc = ["cgminer-cpu-btc-core"]
