@@ -147,12 +147,14 @@ impl DeviceCoreMapper {
             device_to_core.insert(device_id, mapping.clone());
             core_devices.push(device_id);
             mappings.push(mapping);
-
-            info!(
-                "创建设备映射: 设备ID={}, 核心={}, 类型={}, 索引={}",
-                device_id, core_info.name, core_info.core_type, index
-            );
         }
+
+        // 只输出汇总信息，不输出每个设备的详细信息
+        info!("📋 为核心 {} 创建了 {} 个设备映射 (ID范围: {}-{})",
+              core_info.name,
+              mappings.len(),
+              mappings.first().map(|m| m.device_id).unwrap_or(0),
+              mappings.last().map(|m| m.device_id).unwrap_or(0));
 
         Ok(mappings)
     }

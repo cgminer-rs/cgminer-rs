@@ -1,0 +1,97 @@
+# CGMiner-RS 测试配置文件 - CPU BTC 核心
+# 用于测试 CPU BTC 核心功能
+
+[general]
+log_level = "debug"
+work_restart_timeout = 60
+scan_time = 30
+
+[cores]
+# 启用 CPU BTC 核心
+enabled_cores = ["cpu-btc"]
+default_core = "cpu-btc"
+
+# CPU BTC 核心配置
+[cores.cpu_btc]
+enabled = true
+device_count = 4
+min_hashrate = 1000000000.0  # 1 GH/s
+max_hashrate = 5000000000.0  # 5 GH/s
+error_rate = 0.01
+batch_size = 1000
+work_timeout_ms = 5000
+
+# CPU 亲和性配置
+[cores.cpu_btc.cpu_affinity]
+enabled = true
+strategy = "round_robin"
+avoid_hyperthreading = false
+prefer_performance_cores = true
+
+[devices]
+auto_detect = true
+scan_interval = 10
+
+# 虚拟设备链配置
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 1000
+voltage = 900
+auto_tune = false
+chip_count = 1
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 1000
+voltage = 900
+auto_tune = false
+chip_count = 1
+
+[pools]
+strategy = "Failover"
+failover_timeout = 30
+retry_interval = 10
+
+[[pools.pools]]
+url = "stratum+tcp://btc.f2pool.com:1314"
+user = "kayuii.bbt"
+password = "x"
+priority = 1
+enabled = true
+
+[api]
+enabled = true
+bind_address = "127.0.0.1"
+port = 4028
+allow_origins = ["*"]
+
+[monitoring]
+enabled = true
+metrics_interval = 30
+web_port = 8080
+
+[monitoring.alert_thresholds]
+temperature_warning = 80.0
+temperature_critical = 90.0
+hashrate_drop_percent = 20.0
+error_rate_percent = 5.0
+max_temperature = 85.0
+max_cpu_usage = 80.0
+max_memory_usage = 90.0
+max_device_temperature = 85.0
+max_error_rate = 5.0
+min_hashrate = 1.0
+
+[web]
+enabled = true
+bind_address = "127.0.0.1"
+port = 8080
+static_path = "web/static"
+
+[hashmeter]
+enabled = true
+interval = 5
+log_interval = 30
+display_format = "compact"

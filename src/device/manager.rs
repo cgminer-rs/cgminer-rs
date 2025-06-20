@@ -437,8 +437,9 @@ impl DeviceManager {
             });
         }
 
-        info!("🔧 创建设备: ID={}, 名称={}, 类型={}, 核心={}",
-              device_id, device_name, device_type, mapping.core_name);
+        // 只在debug级别输出详细的设备创建信息
+        debug!("🔧 创建设备: ID={}, 名称={}, 类型={}, 核心={}",
+               device_id, device_name, device_type, mapping.core_name);
 
         // 直接创建设备实例
         let device = self.create_device_instance(device_info.clone()).await.map_err(|e| {
@@ -482,7 +483,8 @@ impl DeviceManager {
         let mut stats_cache = self.device_stats.write().await;
         stats_cache.insert(device_id, DeviceStats::new());
 
-        info!("✅ 设备创建成功: ID={}, 名称={}, 核心={}", device_id, device_name, mapping.core_name);
+        // 只在debug级别输出详细的设备创建成功信息
+        debug!("✅ 设备创建成功: ID={}, 名称={}, 核心={}", device_id, device_name, mapping.core_name);
 
         Ok(())
     }
@@ -531,11 +533,15 @@ impl DeviceManager {
     async fn start_all_devices(&self) -> Result<(), DeviceError> {
         let devices = self.devices.read().await;
 
+        let total_devices = devices.len();
+        let mut started_devices = 0;
+
         for (device_id, device) in devices.iter() {
             let mut device = device.lock().await;
             match device.start().await {
                 Ok(_) => {
-                    info!("Device {} started successfully", device_id);
+                    debug!("Device {} started successfully", device_id);
+                    started_devices += 1;
                 }
                 Err(e) => {
                     error!("Failed to start device {}: {}", device_id, e);
@@ -544,6 +550,7 @@ impl DeviceManager {
             }
         }
 
+        info!("✅ 设备启动完成: {}/{} 个设备成功启动", started_devices, total_devices);
         Ok(())
     }
 
