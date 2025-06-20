@@ -101,61 +101,32 @@ reqwest = { version = "0.11", features = ["json"] }
 name = "cgminer-rs"
 path = "src/main.rs"
 
-# 发布版本优化配置 - 静态编译优化
+# 主程序基础配置 - 编译器优化已移至外置核心
 [profile.release]
-# 链接时优化 - 提高性能，静态编译的关键
-lto = "fat"
-# 单个代码生成单元 - 最大化优化
-codegen-units = 1
-# 崩溃时直接终止 - 减少二进制大小
-panic = "abort"
-# 最高优化级别
-opt-level = 3
-# 启用调试信息用于性能分析
-debug = 1
-# 去除未使用的代码
+# 基础优化配置
+opt-level = 2
+debug = false
 strip = "symbols"
-# 溢出检查（挖矿程序需要数值稳定性）
-overflow-checks = false
-# 静态编译优化
-rpath = false
+panic = "unwind"
 
 # 开发版本配置
 [profile.dev]
 debug = true
-opt-level = 1
-# 开发时保留溢出检查
-overflow-checks = true
-# 增量编译加速开发
+opt-level = 0
 incremental = true
 
-# 性能测试优化配置
+# 性能测试配置
 [profile.bench]
 inherits = "release"
 debug = true
-lto = "thin"
 
 # 测试配置
 [profile.test]
-opt-level = 1
+opt-level = 0
 debug = true
-overflow-checks = true
 
-# 注意：平台特定的编译优化已移至 .cargo/config.toml
-# 静态编译模式下，所有核心在编译时直接链接，无需动态加载
-
-# 核心库特定优化（移除 lto，因为它不能在 package 级别设置）
-[profile.release.package.cgminer-cpu-btc-core]
-opt-level = 3
-codegen-units = 1
-
-[profile.release.package.cgminer-asic-maijie-l7-core]
-opt-level = 3
-codegen-units = 1
-
-[profile.release.package.cgminer-core]
-opt-level = 3
-codegen-units = 1
+# 注意：编译器优化和平台优化已移至外置核心
+# 主程序保持基础配置，由各个核心自行处理优化
 
 [features]
 default = []

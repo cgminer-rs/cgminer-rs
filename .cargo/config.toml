@@ -1,54 +1,14 @@
 # Cargo 构建配置文件
-# 针对不同平台的编译优化设置
+# 主程序基础配置，编译器优化已移至外置核心
 
 [build]
-# 默认使用所有CPU核心进行并行编译
-# jobs = 0  # 注释掉，让 Cargo 自动决定
-
-# 平台特定的编译器标志
-[target.aarch64-apple-darwin]
-# Mac M4 (Apple Silicon) 专用优化
-rustflags = [
-    # 使用原生CPU特性
-    "-C", "target-cpu=apple-m1",
-    # 启用硬件加速特性
-    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+crc",
-]
-
-[target.x86_64-apple-darwin]
-# Intel Mac 优化
-rustflags = [
-    "-C", "target-cpu=native",
-    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2",
-]
-
-[target.x86_64-unknown-linux-gnu]
-# Linux x86_64 优化
-rustflags = [
-    "-C", "target-cpu=native",
-    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2,+fma",
-]
-
-[target.aarch64-unknown-linux-gnu]
-# ARM64 Linux 优化
-rustflags = [
-    "-C", "target-cpu=native",
-    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+crc",
-]
-
-[target.x86_64-pc-windows-msvc]
-# Windows x86_64 优化
-rustflags = [
-    "-C", "target-cpu=native",
-    "-C", "target-feature=+aes,+sha,+sse4.2,+avx2",
-]
+# 使用所有CPU核心进行并行编译（注释掉让Cargo自动决定）
+# jobs = 0
 
 # 环境变量设置
 [env]
-# 启用 LLVM 优化
-RUSTFLAGS = { value = "-C prefer-dynamic=no", force = false }
-# 启用并行编译
-CARGO_BUILD_JOBS = { value = "0", force = false }
+# 基础编译设置（注释掉让Cargo自动决定）
+# CARGO_BUILD_JOBS = { value = "0", force = false }
 
 # 别名定义
 [alias]
@@ -56,16 +16,12 @@ CARGO_BUILD_JOBS = { value = "0", force = false }
 quick = "build --profile dev"
 # 性能构建（发布用）
 perf = "build --release"
-# Mac M4 专用构建
-m4-build = "build --release --target aarch64-apple-darwin"
 # 基准测试构建
 bench-build = "build --profile bench"
 # 清理并重新构建
 rebuild = ["clean", "build --release"]
 # 运行所有测试
 test-all = "test --all-features --release"
-# 性能分析构建
-profile-build = "build --release --features=profiling"
 
 # 注册表配置
 [registries]
@@ -92,34 +48,5 @@ user-agent = "cgminer-rs-build"
 # [source.tuna]
 # registry = "https://mirrors.tuna.tsinghua.edu.cn/git/crates.io-index.git"
 
-# 构建缓存配置
-[profile.dev.build-override]
-opt-level = 3
-codegen-units = 1
-
-[profile.release.build-override]
-opt-level = 3
-codegen-units = 1
-
-# 包特定优化
-[profile.dev.package.sha2]
-opt-level = 3
-
-[profile.dev.package.aes-gcm]
-opt-level = 3
-
-[profile.dev.package.tokio]
-opt-level = 2
-
-# 发布版本包优化
-[profile.release.package.sha2]
-opt-level = 3
-codegen-units = 1
-
-[profile.release.package.aes-gcm]
-opt-level = 3
-codegen-units = 1
-
-[profile.release.package.serde]
-opt-level = 3
-codegen-units = 1
+# 注意：编译器优化和平台优化已移至外置核心
+# 主程序保持基础配置，由各个核心自行处理优化
