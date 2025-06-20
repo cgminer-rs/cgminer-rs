@@ -67,3 +67,4 @@ device_*.json
 # Test artifacts
 test_results/
 test_output/
+cgminer.toml

@@ -257,9 +257,9 @@ fn create_test_config() -> Config {
             scan_time: 5,
         },
         cores: cgminer_rs::config::CoresConfig {
-            enabled_cores: vec!["btc-software".to_string()],
-            default_core: "btc-software".to_string(),
-            btc_software: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
+            enabled_cores: vec!["cpu-btc".to_string()],
+            default_core: "cpu-btc".to_string(),
+            cpu_btc: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
                 enabled: true,
                 device_count: 4,
                 min_hashrate: 1_000_000_000.0,
@@ -521,7 +521,7 @@ fn create_test_work(id: u64) -> Work {
 
 /// 测试Bitcoin软算法核心的基本生命周期
 #[tokio::test]
-async fn test_btc_software_core_lifecycle() {
+async fn test_cpu_btc_core_lifecycle() {
     // 创建Bitcoin软算法核心
     let mut core = SoftwareMiningCore::new("Bitcoin集成测试核心".to_string());
 

@@ -1,4 +1,4 @@
-use crate::config::DeviceConfig;
+use crate::config::{DeviceConfig, Config};
 use crate::error::DeviceError;
 use cgminer_core::CoreRegistry;
 use crate::device::{
@@ -71,6 +71,8 @@ pub struct DeviceManager {
     architecture_manager: Arc<UnifiedDeviceArchitecture>,
     /// 配置
     config: DeviceConfig,
+    /// 完整配置（用于访问核心配置中的设备数量）
+    full_config: Option<Config>,
 
     /// 监控任务句柄
     monitoring_handle: Option<tokio::task::JoinHandle<()>>,
@@ -96,6 +98,7 @@ impl DeviceManager {
             device_core_mapper: Arc::new(device_core_mapper),
             architecture_manager: Arc::new(architecture_manager),
             config,
+            full_config: None,
             monitoring_handle: None,
             running: Arc::new(RwLock::new(false)),
         }
@@ -105,6 +108,11 @@ impl DeviceManager {
     pub async fn set_active_cores(&mut self, core_ids: Vec<String>) {
         self.active_core_ids = core_ids;
         info!("🏭 设备管理器接收到活跃核心: {:?}", self.active_core_ids);
+    }
+
+    /// 设置完整配置（用于访问核心配置）
+    pub fn set_full_config(&mut self, config: Config) {
+        self.full_config = Some(config);
     }
 
     /// 初始化设备管理器
@@ -228,7 +236,7 @@ impl DeviceManager {
     async fn find_active_core_for_factory(&self, factory_name: &str) -> Result<String, DeviceError> {
         // 根据工厂名称映射到核心类型前缀
         let core_prefix = match factory_name {
-            "Software Mining Core" => "btc-software",
+            "Software Mining Core" => "cpu-btc",
             "Maijie L7 Core" => "maijie-l7",
             _ => {
                 return Err(DeviceError::InitializationFailed {
@@ -263,7 +271,7 @@ impl DeviceManager {
             Err(e) => {
                 warn!("核心 {} 扫描设备失败: {}", core_id, e);
                 // 如果核心扫描失败，回退到生成设备信息的方式
-                if core_id.starts_with("btc-software") {
+                if core_id.starts_with("cpu-btc") {
                     self.generate_software_device_infos().await
                 } else if core_id.starts_with("maijie-l7") {
                     self.generate_asic_device_infos().await
@@ -276,7 +284,18 @@ impl DeviceManager {
 
     /// 生成软件设备信息（从factory移植）
     async fn generate_software_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
-        let device_count = 4; // 默认创建4个软件设备
+        // 从完整配置中读取设备数量
+        let device_count = if let Some(ref full_config) = self.full_config {
+            if let Some(ref cpu_btc_config) = full_config.cores.cpu_btc {
+                cpu_btc_config.device_count
+            } else {
+                4 // 默认值
+            }
+        } else {
+            4 // 默认值
+        };
+
+        info!("🔧 生成 {} 个软件设备", device_count);
         let mut devices = Vec::new();
 
         for i in 0..device_count {

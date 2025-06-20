@@ -1,0 +1,143 @@
+# CGMiner-RS SOCKS5代理配置示例
+# 本文件展示如何配置SOCKS5代理来连接矿池
+
+[general]
+log_level = "info"
+work_restart_timeout = 60
+scan_time = 30
+
+[cores]
+enabled_cores = ["cpu-btc"]
+default_core = "cpu-btc"
+
+[cores.cpu_btc]
+enabled = true
+device_count = 4
+min_hashrate = 1000000000.0  # 1 GH/s
+max_hashrate = 5000000000.0  # 5 GH/s
+error_rate = 0.01
+batch_size = 1000
+work_timeout_ms = 5000
+
+[cores.cpu_btc.cpu_affinity]
+enabled = true
+strategy = "round_robin"
+avoid_hyperthreading = false
+prefer_performance_cores = true
+
+[devices]
+auto_detect = true
+scan_interval = 5
+
+[[devices.chains]]
+id = 0
+enabled = true
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+
+[[devices.chains]]
+id = 1
+enabled = true
+frequency = 500
+voltage = 850
+auto_tune = true
+chip_count = 76
+
+[pools]
+strategy = "Failover"
+failover_timeout = 30
+retry_interval = 10
+
+# 示例1: 使用SOCKS5代理（无认证）连接F2Pool
+[[pools.pools]]
+name = "f2pool-socks5"
+url = "stratum+tcp://btc.f2pool.com:1314"
+username = "kayuii.bbt"
+password = "x"
+priority = 1
+enabled = true
+
+[pools.pools.proxy]
+proxy_type = "socks5"
+host = "127.0.0.1"
+port = 1080
+
+# 示例2: 使用SOCKS5代理（带认证）连接矿池
+[[pools.pools]]
+name = "pool-socks5-auth"
+url = "stratum+tcp://pool.example.com:4444"
+username = "your_username"
+password = "your_password"
+priority = 2
+enabled = false
+
+[pools.pools.proxy]
+proxy_type = "socks5"
+host = "proxy.example.com"
+port = 1080
+username = "proxy_user"
+password = "proxy_pass"
+
+# 示例3: 使用SOCKS5+TLS代理连接矿池
+[[pools.pools]]
+name = "pool-socks5-tls"
+url = "stratum+tcp://secure.pool.com:4444"
+username = "your_username"
+password = "your_password"
+priority = 3
+enabled = false
+
+[pools.pools.proxy]
+proxy_type = "socks5+tls"
+host = "secure-proxy.example.com"
+port = 1080
+username = "proxy_user"
+password = "proxy_pass"
+
+# 示例4: 直接连接（无代理）
+[[pools.pools]]
+name = "direct-connection"
+url = "stratum+tcp://direct.pool.com:4444"
+username = "your_username"
+password = "your_password"
+priority = 4
+enabled = false
+# 注意：没有proxy配置表示直接连接
+
+[api]
+enabled = true
+bind_address = "127.0.0.1"
+port = 4028
+allow_origins = ["*"]
+
+[monitoring]
+enabled = true
+metrics_interval = 30
+web_port = 8888
+
+[monitoring.alert_thresholds]
+temperature_warning = 80.0
+temperature_critical = 90.0
+hashrate_drop_percent = 20.0
+error_rate_percent = 5.0
+max_temperature = 85.0
+max_cpu_usage = 80.0
+max_memory_usage = 90.0
+max_device_temperature = 85.0
+max_error_rate = 5.0
+min_hashrate = 50.0
+
+[web]
+enabled = true
+bind_address = "127.0.0.1"
+port = 8080
+static_dir = "web"
+
+[hashmeter]
+enabled = true
+interval = 5
+display_format = "compact"
+show_per_device = true
+show_pool_stats = true

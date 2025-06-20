@@ -20,7 +20,7 @@ mod security;
 
 use config::{Config, Args};
 use mining::MiningManager;
-use core_loader::CoreLoader;
+use core_loader::StaticCoreRegistry;
 
 #[tokio::main]
 async fn main() {
@@ -40,7 +40,7 @@ async fn main() {
     debug!("📝 Command line arguments parsed successfully");
 
     // 加载配置
-    let config = match Config::load(&args.config) {
+    let mut config = match Config::load(&args.config) {
         Ok(cfg) => {
             info!("📋 Configuration loaded from: {}", args.config);
             cfg
@@ -52,30 +52,50 @@ async fn main() {
         }
     };
 
-    // 显示配置摘要
-    print_config_summary(&config);
-
-    // 创建核心加载器
-    info!("🔧 Initializing mining core loader...");
-    let core_loader = CoreLoader::new();
-
-    // 加载所有可用的挖矿核心
-    info!("📦 Loading mining cores...");
-    if let Err(e) = core_loader.load_all_cores().await {
-        error!("❌ Failed to load mining cores: {}", e);
-        error!("💡 Please check if the core libraries are properly installed");
+    // 应用CLI参数覆盖配置
+    if let Err(e) = config.apply_cli_args(&args) {
+        error!("❌ Failed to apply CLI arguments: {}", e);
+        error!("💡 Please check your command line arguments");
         return;
     }
 
-    // 显示加载的核心信息
-    match core_loader.get_load_stats().await {
+    // 如果有CLI覆盖，显示相关信息
+    if args.proxy.is_some() || args.pool.is_some() || args.user.is_some() {
+        info!("🔧 CLI arguments applied to configuration");
+        if let Some(proxy) = &args.proxy {
+            info!("   🌐 Proxy: {}", proxy);
+        }
+        if let Some(pool) = &args.pool {
+            info!("   🏊 Pool: {}", pool);
+        }
+        if let Some(user) = &args.user {
+            info!("   👤 User: {}", user);
+        }
+    }
+
+    // 显示配置摘要
+    print_config_summary(&config);
+
+    // 创建静态核心注册器
+    info!("🔧 Initializing static core registry...");
+    let core_registry = match StaticCoreRegistry::new().await {
+        Ok(registry) => registry,
+        Err(e) => {
+            error!("❌ Failed to initialize core registry: {}", e);
+            error!("💡 Please check if the required features are enabled");
+            return;
+        }
+    };
+
+    // 显示注册的核心信息
+    match core_registry.get_registry_stats().await {
         Ok(stats) => {
-            info!("✅ Mining cores loaded successfully");
+            info!("✅ Mining cores registered successfully");
             info!("📊 {}", stats);
             info!("═══════════════════════════════════════════════════════════");
 
-            // 列出所有已加载的核心
-            if let Ok(cores) = core_loader.list_loaded_cores().await {
+            // 列出所有已注册的核心
+            if let Ok(cores) = core_registry.list_registered_cores().await {
                 info!("🎯 Available Mining Cores:");
                 for core in cores {
                     info!("   ✓ {} ({}): {}", core.name, core.core_type, core.description);
@@ -84,13 +104,13 @@ async fn main() {
             }
         }
         Err(e) => {
-            warn!("⚠️ Failed to get core load statistics: {}", e);
+            warn!("⚠️ Failed to get core registry statistics: {}", e);
         },
     }
 
     // 创建挖矿管理器
     info!("⚙️ Initializing mining manager...");
-    let mining_manager = match MiningManager::new(config, core_loader.registry()).await {
+    let mining_manager = match MiningManager::new(config, core_registry.registry()).await {
         Ok(manager) => {
             info!("✅ Mining manager initialized successfully");
             Arc::new(manager)
@@ -104,7 +124,7 @@ async fn main() {
 
     // 设置信号处理
     debug!("🔧 Setting up signal handlers...");
-    if let Err(e) = setup_signal_handlers(mining_manager.clone(), core_loader).await {
+    if let Err(e) = setup_signal_handlers(mining_manager.clone(), core_registry).await {
         error!("❌ Failed to setup signal handlers: {}", e);
         return;
     }
@@ -171,7 +191,7 @@ fn init_logging() -> Result<()> {
     Ok(())
 }
 
-async fn setup_signal_handlers(mining_manager: Arc<MiningManager>, core_loader: CoreLoader) -> anyhow::Result<()> {
+async fn setup_signal_handlers(mining_manager: Arc<MiningManager>, core_registry: StaticCoreRegistry) -> anyhow::Result<()> {
     let manager = mining_manager.clone();
     tokio::spawn(async move {
         #[cfg(unix)]
@@ -191,7 +211,7 @@ async fn setup_signal_handlers(mining_manager: Arc<MiningManager>, core_loader: 
 
                     // 关闭所有核心
                     info!("🔧 Shutting down mining cores...");
-                    if let Err(e) = core_loader.shutdown().await {
+                    if let Err(e) = core_registry.shutdown().await {
                         error!("❌ Error shutting down cores: {}", e);
                     } else {
                         info!("✅ Mining cores shutdown completed");

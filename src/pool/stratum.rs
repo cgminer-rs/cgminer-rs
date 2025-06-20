@@ -1,6 +1,8 @@
 use crate::error::PoolError;
 use crate::device::Work;
 use crate::pool::Share;
+use crate::pool::proxy::ProxyConnector;
+use crate::config::ProxyConfig;
 use crate::logging::mining_logger::MiningLogger;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -8,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpStream;
+
 use tokio::sync::{RwLock, Mutex};
 use tokio::time::timeout;
 use tracing::{info, error, debug, warn};
@@ -39,10 +41,12 @@ pub struct StratumClient {
     username: String,
     /// 密码
     password: String,
+    /// 代理配置
+    proxy_config: Option<ProxyConfig>,
     /// TCP连接 - 写入部分
-    writer: Arc<Mutex<Option<tokio::net::tcp::OwnedWriteHalf>>>,
+    writer: Arc<Mutex<Option<Box<dyn tokio::io::AsyncWrite + Unpin + Send>>>>,
     /// TCP连接 - 读取部分
-    reader: Arc<Mutex<Option<tokio::net::tcp::OwnedReadHalf>>>,
+    reader: Arc<Mutex<Option<Box<dyn tokio::io::AsyncRead + Unpin + Send>>>>,
     /// 连接状态
     connected: Arc<RwLock<bool>>,
     /// 订阅ID
@@ -81,11 +85,12 @@ pub struct StratumJob {
 
 impl StratumClient {
     /// 创建新的 Stratum 客户端
-    pub async fn new(url: String, username: String, password: String, pool_id: u32, verbose: bool) -> Result<Self, PoolError> {
+    pub async fn new(url: String, username: String, password: String, pool_id: u32, verbose: bool, proxy_config: Option<ProxyConfig>) -> Result<Self, PoolError> {
         Ok(Self {
             url,
             username,
             password,
+            proxy_config,
             writer: Arc::new(Mutex::new(None)),
             reader: Arc::new(Mutex::new(None)),
             connected: Arc::new(RwLock::new(false)),
@@ -106,34 +111,28 @@ impl StratumClient {
         info!("Connecting to Stratum pool: {}", self.url);
         debug!("🔗 [Pool {}] 开始连接到矿池: {}", self.pool_id, self.url);
 
-        // 解析URL
-        let url = self.url.strip_prefix("stratum+tcp://")
-            .ok_or_else(|| PoolError::InvalidUrl { url: self.url.clone() })?;
+        // 创建代理连接器
+        let connector = ProxyConnector::new(self.proxy_config.clone());
 
-        debug!("🔗 [Pool {}] 解析后的连接地址: {}", self.pool_id, url);
-
-        // 连接TCP
-        debug!("🔗 [Pool {}] 尝试建立TCP连接，超时时间: 10秒", self.pool_id);
-        let stream = match timeout(Duration::from_secs(10), TcpStream::connect(url)).await {
-            Ok(Ok(stream)) => {
-                debug!("🔗 [Pool {}] TCP连接建立成功", self.pool_id);
-                stream
+        // 建立连接（可能通过代理）
+        debug!("🔗 [Pool {}] 尝试建立连接，超时时间: 10秒", self.pool_id);
+        let connection = match timeout(Duration::from_secs(10), connector.connect(&self.url)).await {
+            Ok(Ok(connection)) => {
+                debug!("🔗 [Pool {}] 连接建立成功", self.pool_id);
+                connection
             },
             Ok(Err(e)) => {
-                debug!("🔗 [Pool {}] TCP连接失败: {}", self.pool_id, e);
+                debug!("🔗 [Pool {}] 连接失败: {}", self.pool_id, e);
                 self.mining_logger.log_pool_connection_change(
                     self.pool_id,
                     &self.url,
                     false,
                     Some(&e.to_string())
                 );
-                return Err(PoolError::ConnectionFailed {
-                    url: self.url.clone(),
-                    error: e.to_string(),
-                });
+                return Err(e);
             }
             Err(_) => {
-                debug!("🔗 [Pool {}] TCP连接超时", self.pool_id);
+                debug!("🔗 [Pool {}] 连接超时", self.pool_id);
                 self.mining_logger.log_pool_connection_change(
                     self.pool_id,
                     &self.url,
@@ -145,8 +144,8 @@ impl StratumClient {
         };
 
         // 分离读写流
-        debug!("🔗 [Pool {}] 分离TCP流为读写流", self.pool_id);
-        let (reader, writer) = stream.into_split();
+        debug!("🔗 [Pool {}] 分离连接为读写流", self.pool_id);
+        let (reader, writer) = connection.into_split();
         *self.reader.lock().await = Some(reader);
         *self.writer.lock().await = Some(writer);
         *self.connected.write().await = true;

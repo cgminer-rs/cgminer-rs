@@ -63,6 +63,7 @@ impl MiningManager {
 
         // 创建设备管理器
         let mut device_manager = DeviceManager::new(config.devices.clone(), core_registry.clone());
+        device_manager.set_full_config(config.clone());
 
         // 创建设备-核心映射器
         let device_core_mapper = DeviceCoreMapper::new(core_registry.clone());
@@ -125,7 +126,7 @@ impl MiningManager {
 
         for core_type in &cores_config.enabled_cores {
             match core_type.as_str() {
-                "software" | "btc-software" | "btc" | "cpu" => {
+                "software" | "cpu-btc" | "btc" | "cpu" => {
                     // 软算法核心不需要设备驱动，直接通过核心管理
                     info!("软算法核心已启用，将通过核心管理器直接管理");
                 }
@@ -648,7 +649,7 @@ impl MiningManager {
 
         for core_type in enabled_cores {
             match core_type.as_str() {
-                "software" | "btc-software" | "btc" | "cpu" => {
+                "software" | "cpu-btc" | "btc" | "cpu" => {
                     info!("启动软算法核心");
 
                     // 创建软算法核心配置
@@ -658,20 +659,20 @@ impl MiningManager {
                         devices: vec![], // 设备配置将在核心内部创建
                         custom_params: {
                             let mut params = std::collections::HashMap::new();
-                            if let Some(btc_software_config) = &self.full_config.cores.btc_software {
-                                params.insert("device_count".to_string(), serde_json::Value::Number(serde_json::Number::from(btc_software_config.device_count)));
-                                params.insert("min_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(btc_software_config.min_hashrate).unwrap()));
-                                params.insert("max_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(btc_software_config.max_hashrate).unwrap()));
-                                params.insert("error_rate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(btc_software_config.error_rate).unwrap()));
-                                params.insert("batch_size".to_string(), serde_json::Value::Number(serde_json::Number::from(btc_software_config.batch_size)));
-                                params.insert("work_timeout_ms".to_string(), serde_json::Value::Number(serde_json::Number::from(btc_software_config.work_timeout_ms)));
+                            if let Some(cpu_btc_config) = &self.full_config.cores.cpu_btc {
+                                params.insert("device_count".to_string(), serde_json::Value::Number(serde_json::Number::from(cpu_btc_config.device_count)));
+                                params.insert("min_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(cpu_btc_config.min_hashrate).unwrap()));
+                                params.insert("max_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(cpu_btc_config.max_hashrate).unwrap()));
+                                params.insert("error_rate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(cpu_btc_config.error_rate).unwrap()));
+                                params.insert("batch_size".to_string(), serde_json::Value::Number(serde_json::Number::from(cpu_btc_config.batch_size)));
+                                params.insert("work_timeout_ms".to_string(), serde_json::Value::Number(serde_json::Number::from(cpu_btc_config.work_timeout_ms)));
                             }
                             params
                         },
                     };
 
                     // 创建软算法核心
-                    let core_id = self.create_core("btc-software", core_config).await?;
+                    let core_id = self.create_core("cpu-btc", core_config).await?;
 
                     // 检查核心是否创建成功
                     if self.core_registry.get_core(&core_id).await

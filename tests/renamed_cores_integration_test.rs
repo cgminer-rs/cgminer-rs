@@ -9,14 +9,14 @@ use std::time::Duration;
 use tokio::time::timeout;
 
 #[tokio::test]
-async fn test_end_to_end_mining_with_btc_software_core() {
+async fn test_end_to_end_mining_with_cpu_btc_core() {
     // 测试使用Bitcoin软算法核心进行完整挖矿流程
-    #[cfg(feature = "btc-software")]
+    #[cfg(feature = "cpu-btc")]
     {
         println!("🚀 开始Bitcoin软算法核心端到端测试");
 
         // 创建测试配置
-        let config = create_btc_software_test_config();
+        let config = create_cpu_btc_test_config();
 
         // 验证配置
         let validation_result = config.validate();
@@ -57,7 +57,7 @@ async fn test_end_to_end_mining_with_btc_software_core() {
         println!("✅ Bitcoin软算法核心端到端测试完成");
     }
 
-    #[cfg(not(feature = "btc-software"))]
+    #[cfg(not(feature = "cpu-btc"))]
     {
         println!("ℹ️  Bitcoin软算法核心功能未启用，跳过端到端测试");
     }
@@ -129,12 +129,12 @@ async fn test_core_feature_detection() {
     // 测试核心功能检测
     println!("🔍 检测可用的核心功能:");
 
-    #[cfg(feature = "btc-software")]
+    #[cfg(feature = "cpu-btc")]
     {
         println!("✅ Bitcoin软算法核心 (cgminer-cpu-btc-core) 已启用");
     }
 
-    #[cfg(not(feature = "btc-software"))]
+    #[cfg(not(feature = "cpu-btc"))]
     {
         println!("❌ Bitcoin软算法核心 (cgminer-cpu-btc-core) 未启用");
     }
@@ -166,7 +166,7 @@ async fn test_config_compatibility_with_renamed_cores() {
     println!("🔧 测试配置兼容性");
 
     // 测试Bitcoin软算法核心配置
-    let btc_config = create_btc_software_test_config();
+    let btc_config = create_cpu_btc_test_config();
     let btc_validation = btc_config.validate();
     assert!(btc_validation.is_ok(), "Bitcoin软算法核心配置应该有效");
     println!("✅ Bitcoin软算法核心配置验证通过");
@@ -185,7 +185,7 @@ async fn test_config_compatibility_with_renamed_cores() {
 }
 
 /// 创建Bitcoin软算法核心测试配置
-fn create_btc_software_test_config() -> Config {
+fn create_cpu_btc_test_config() -> Config {
     Config {
         general: cgminer_rs::config::GeneralConfig {
             log_level: "info".to_string(),
@@ -195,9 +195,9 @@ fn create_btc_software_test_config() -> Config {
             scan_time: 5,
         },
         cores: cgminer_rs::config::CoresConfig {
-            enabled_cores: vec!["btc-software".to_string()],
-            default_core: "btc-software".to_string(),
-            btc_software: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
+            enabled_cores: vec!["cpu-btc".to_string()],
+            default_core: "cpu-btc".to_string(),
+            cpu_btc: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
                 enabled: true,
                 device_count: 2,
                 min_hashrate: 1_000_000_000.0,
@@ -269,7 +269,7 @@ fn create_maijie_l7_test_config() -> Config {
         cores: cgminer_rs::config::CoresConfig {
             enabled_cores: vec!["maijie-l7".to_string()],
             default_core: "maijie-l7".to_string(),
-            btc_software: None,
+            cpu_btc: None,
             maijie_l7: Some(cgminer_rs::config::MaijieL7CoreConfig {
                 enabled: true,
                 chain_count: 3,
@@ -363,9 +363,9 @@ fn create_mixed_cores_test_config() -> Config {
             scan_time: 5,
         },
         cores: cgminer_rs::config::CoresConfig {
-            enabled_cores: vec!["btc-software".to_string(), "maijie-l7".to_string()],
-            default_core: "btc-software".to_string(),
-            btc_software: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
+            enabled_cores: vec!["cpu-btc".to_string(), "maijie-l7".to_string()],
+            default_core: "cpu-btc".to_string(),
+            cpu_btc: Some(cgminer_rs::config::BtcSoftwareCoreConfig {
                 enabled: true,
                 device_count: 2,
                 min_hashrate: 1_000_000_000.0,

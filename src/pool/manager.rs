@@ -61,6 +61,7 @@ impl PoolManager {
                 pool_info.password.clone(),
                 pool_id,
                 false, // 默认不启用详细日志
+                pool_info.proxy.clone(), // 传递代理配置
             ).await?;
 
             pools.insert(pool_id, Arc::new(Mutex::new(pool)));

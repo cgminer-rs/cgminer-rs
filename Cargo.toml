@@ -15,7 +15,7 @@ categories = ["hardware-support", "network-programming"]
 # Core libraries - 指向外部目录
 cgminer-core = { path = "../cgminer-core" }
 cgminer-cpu-btc-core = { path = "../cgminer-cpu-btc-core", optional = true }
-cgminer-gpu-btc-core = { path = "../cgminer-gpu-btc-core", optional = true }
+# cgminer-gpu-btc-core = { path = "../cgminer-gpu-btc-core", optional = true }  # 暂时禁用，需要修正接口
 cgminer-asic-maijie-l7-core = { path = "../cgminer-asic-maijie-l7-core", optional = true }
 
 # Async runtime
@@ -35,6 +35,10 @@ clap = { version = "4.0", features = ["derive"] }
 reqwest = { version = "0.11", features = ["json"] }
 tungstenite = "0.20"
 tokio-tungstenite = "0.20"
+tokio-socks = "0.5"
+tokio-native-tls = "0.3"
+native-tls = "0.2"
+url = "2.4"
 
 # Logging
 tracing = "0.1"
@@ -71,8 +75,8 @@ aes-gcm = "0.10"
 rand = "0.8"
 base64 = "0.21"
 
-# Dynamic library loading
-libloading = { version = "0.8", optional = true }
+# 移除动态库加载依赖，改为静态编译
+# libloading = { version = "0.8", optional = true }
 num_cpus = "1.17.0"
 
 # System monitoring
@@ -93,25 +97,13 @@ criterion = { version = "0.5", features = ["html_reports"] }
 mockall = "0.12"
 reqwest = { version = "0.11", features = ["json"] }
 
-[[bench]]
-name = "mining_benchmark"
-harness = false
-
-[[bench]]
-name = "virtual_device_benchmark"
-harness = false
-
 [[bin]]
 name = "cgminer-rs"
 path = "src/main.rs"
 
-[[bin]]
-name = "test-stratum-connection"
-path = "src/bin/test_stratum_connection.rs"
-
-# 发布版本优化配置
+# 发布版本优化配置 - 静态编译优化
 [profile.release]
-# 链接时优化 - 提高性能
+# 链接时优化 - 提高性能，静态编译的关键
 lto = "fat"
 # 单个代码生成单元 - 最大化优化
 codegen-units = 1
@@ -125,6 +117,8 @@ debug = 1
 strip = "symbols"
 # 溢出检查（挖矿程序需要数值稳定性）
 overflow-checks = false
+# 静态编译优化
+rpath = false
 
 # 开发版本配置
 [profile.dev]
@@ -148,37 +142,41 @@ debug = true
 overflow-checks = true
 
 # 注意：平台特定的编译优化已移至 .cargo/config.toml
-# 这里的 cfg() 语法在 Cargo.toml 中不被支持，需要使用具体的目标三元组
+# 静态编译模式下，所有核心在编译时直接链接，无需动态加载
+
+# 核心库特定优化（移除 lto，因为它不能在 package 级别设置）
+[profile.release.package.cgminer-cpu-btc-core]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.cgminer-asic-maijie-l7-core]
+opt-level = 3
+codegen-units = 1
+
+[profile.release.package.cgminer-core]
+opt-level = 3
+codegen-units = 1
 
 [features]
-default = ["btc-gpu"]
+default = []
 
 # 核心特性
-btc-software = ["cgminer-cpu-btc-core"]
-btc-gpu = ["cgminer-gpu-btc-core"]
+cpu-btc = ["cgminer-cpu-btc-core"]
+# btc-gpu = ["cgminer-gpu-btc-core"]  # 暂时禁用
 maijie-l7 = ["cgminer-asic-maijie-l7-core"]
 
 # 组合特性
-all-cores = ["btc-software", "btc-gpu", "maijie-l7"]
-hardware-only = ["btc-gpu", "maijie-l7"]
-software-only = ["btc-software"]
-gpu-only = ["btc-gpu"]
+all-cores = ["cpu-btc", "maijie-l7"]  # 暂时移除 btc-gpu
+hardware-only = ["maijie-l7"]  # 暂时移除 btc-gpu
+software-only = ["cpu-btc"]
+# gpu-only = ["btc-gpu"]  # 暂时禁用
 
 # 其他特性
 web-ui = []
-dynamic-loading = ["libloading"]
+# 移除动态加载特性，改为静态编译
+# dynamic-loading = ["libloading"]
 
-[[bench]]
-name = "btc_software_core_benchmark"
-harness = false
-required-features = ["btc-software"]
-
-[[bench]]
-name = "maijie_l7_core_benchmark"
-harness = false
-required-features = ["maijie-l7"]
-
-[[bench]]
-name = "gpu_btc_core_benchmark"
-harness = false
-required-features = ["btc-gpu"]
+# [[bench]]
+# name = "gpu_btc_core_benchmark"
+# harness = false
+# required-features = ["btc-gpu"]

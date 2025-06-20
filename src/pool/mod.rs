@@ -3,6 +3,7 @@ pub mod stratum;
 pub mod connection;
 pub mod scheduler;
 pub mod switcher;
+pub mod proxy;
 
 use crate::error::PoolError;
 use crate::device::Work;

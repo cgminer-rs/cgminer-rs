@@ -55,7 +55,7 @@ impl DeviceIdAllocator {
 
         // 为不同核心类型分配ID范围，避免冲突
         core_type_ranges.insert("software".to_string(), (1000, 1499));
-        core_type_ranges.insert("btc-software".to_string(), (1000, 1499));
+        core_type_ranges.insert("cpu-btc".to_string(), (1000, 1499));
         core_type_ranges.insert("btc".to_string(), (1000, 1499));
         core_type_ranges.insert("cpu".to_string(), (1000, 1499));
         core_type_ranges.insert("asic".to_string(), (2000, 2499));

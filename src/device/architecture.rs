@@ -61,17 +61,17 @@ pub struct ResourceLimits {
 impl Default for DeviceArchitectureConfig {
     fn default() -> Self {
         Self {
-            max_devices_per_core: 32,
+            max_devices_per_core: 64, // 增加到64以支持更多软算法设备
             device_id_strategy: DeviceIdStrategy::SegmentedByCore,
             scaling_strategy: ScalingStrategy::Dynamic {
                 min_devices: 1,
-                max_devices: 32
+                max_devices: 64 // 增加到64
             },
             resource_limits: ResourceLimits {
-                max_memory_mb: 2048,
+                max_memory_mb: 4096, // 增加内存限制以支持更多设备
                 max_cpu_percent: 90.0,
-                max_total_devices: 64,
-                max_devices_per_core: 32,
+                max_total_devices: 128, // 增加总设备限制
+                max_devices_per_core: 64, // 增加每核心设备限制
             },
         }
     }
@@ -153,8 +153,8 @@ impl UnifiedDeviceArchitecture {
 
         // 从核心配置中推导设备数量
         if cores_config.enabled_cores.contains(&"software".to_string()) {
-            // 软算法核心通常支持更多设备
-            max_devices = 32;
+            // 软算法核心通常支持更多设备，增加到64以支持高性能挖矿
+            max_devices = 64;
         }
 
         // 检查是否有明确的设备数量配置
@@ -174,7 +174,7 @@ impl UnifiedDeviceArchitecture {
             device_id_strategy: DeviceIdStrategy::SegmentedByCore,
             scaling_strategy,
             resource_limits: ResourceLimits {
-                max_memory_mb: if max_devices > 16 { 4096 } else { 2048 },
+                max_memory_mb: if max_devices > 32 { 8192 } else if max_devices > 16 { 4096 } else { 2048 },
                 max_cpu_percent: 90.0,
                 max_total_devices: max_devices * 2, // 允许一些余量
                 max_devices_per_core: max_devices,
@@ -346,7 +346,7 @@ impl DeviceIdAllocator {
             DeviceIdStrategy::SegmentedByCore => {
                 // 按核心类型分段
                 core_type_ranges.insert("software".to_string(), (1000, 1999));
-                core_type_ranges.insert("btc-software".to_string(), (1000, 1999));
+                core_type_ranges.insert("cpu-btc".to_string(), (1000, 1999));
                 core_type_ranges.insert("asic".to_string(), (2000, 2999));
                 core_type_ranges.insert("maijie-l7".to_string(), (2000, 2999));
             }

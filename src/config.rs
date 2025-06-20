@@ -27,6 +27,30 @@ pub struct Args {
     /// Log level
     #[arg(long, default_value = "info")]
     pub log_level: String,
+
+    /// SOCKS5 proxy URL (e.g., socks5://127.0.0.1:1080 or socks5+tls://proxy.example.com:1080)
+    #[arg(long, help = "SOCKS5 proxy URL for pool connections")]
+    pub proxy: Option<String>,
+
+    /// SOCKS5 proxy username for authentication
+    #[arg(long, help = "Username for SOCKS5 proxy authentication")]
+    pub proxy_user: Option<String>,
+
+    /// SOCKS5 proxy password for authentication
+    #[arg(long, help = "Password for SOCKS5 proxy authentication")]
+    pub proxy_pass: Option<String>,
+
+    /// Pool URL to connect to (overrides config file)
+    #[arg(short = 'o', long, help = "Mining pool URL (stratum+tcp://pool:port)")]
+    pub pool: Option<String>,
+
+    /// Pool username/worker name (overrides config file)
+    #[arg(short = 'u', long, help = "Pool username or worker name")]
+    pub user: Option<String>,
+
+    /// Pool password (overrides config file)
+    #[arg(short = 'p', long, help = "Pool password")]
+    pub pass: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +81,7 @@ pub struct GeneralConfig {
 pub struct CoresConfig {
     pub enabled_cores: Vec<String>,
     pub default_core: String,
-    pub btc_software: Option<BtcSoftwareCoreConfig>,
+    pub cpu_btc: Option<BtcSoftwareCoreConfig>,
     pub maijie_l7: Option<MaijieL7CoreConfig>,
 }
 
@@ -143,6 +167,23 @@ pub struct PoolInfo {
     pub priority: u8,
     pub quota: Option<u32>,
     pub enabled: bool,
+    /// 代理配置
+    pub proxy: Option<ProxyConfig>,
+}
+
+/// 代理配置
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProxyConfig {
+    /// 代理类型：socks5, socks5+tls
+    pub proxy_type: String,
+    /// 代理服务器地址
+    pub host: String,
+    /// 代理服务器端口
+    pub port: u16,
+    /// 代理认证用户名（可选）
+    pub username: Option<String>,
+    /// 代理认证密码（可选）
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -307,9 +348,9 @@ impl Default for Config {
                 scan_time: 30,
             },
             cores: CoresConfig {
-                enabled_cores: vec!["btc-software".to_string()],
-                default_core: "btc-software".to_string(),
-                btc_software: Some(BtcSoftwareCoreConfig {
+                enabled_cores: vec!["cpu-btc".to_string()],
+                default_core: "cpu-btc".to_string(),
+                cpu_btc: Some(BtcSoftwareCoreConfig {
                     enabled: true,
                     device_count: 4,
                     min_hashrate: 1_000_000_000.0, // 1 GH/s
@@ -370,6 +411,7 @@ impl Default for Config {
                         priority: 1,
                         quota: None,
                         enabled: true,
+                        proxy: None,
                     },
                 ],
             },
@@ -419,6 +461,128 @@ impl Config {
         Ok(config)
     }
 
+    /// 应用CLI参数覆盖配置
+    pub fn apply_cli_args(&mut self, args: &Args) -> Result<()> {
+        // 应用API端口覆盖
+        if args.api_port != 4028 {
+            self.api.port = args.api_port;
+        }
+
+        // 应用API禁用选项
+        if args.no_api {
+            self.api.enabled = false;
+        }
+
+        // 应用日志级别覆盖
+        if args.log_level != "info" {
+            self.general.log_level = args.log_level.clone();
+        }
+
+        // 处理代理和矿池相关的CLI参数
+        if args.proxy.is_some() || args.pool.is_some() || args.user.is_some() || args.pass.is_some() {
+            self.apply_pool_cli_args(args)?;
+        }
+
+        Ok(())
+    }
+
+    /// 应用矿池相关的CLI参数
+    fn apply_pool_cli_args(&mut self, args: &Args) -> Result<()> {
+        // 如果指定了矿池URL，创建或修改第一个矿池配置
+        if let Some(pool_url) = &args.pool {
+            // 确保至少有一个矿池配置
+            if self.pools.pools.is_empty() {
+                self.pools.pools.push(PoolInfo {
+                    name: Some("cli-pool".to_string()),
+                    url: pool_url.clone(),
+                    username: args.user.clone().unwrap_or_else(|| "worker".to_string()),
+                    password: args.pass.clone().unwrap_or_else(|| "x".to_string()),
+                    priority: 1,
+                    quota: None,
+                    enabled: true,
+                    proxy: None,
+                });
+            } else {
+                // 修改第一个矿池配置
+                self.pools.pools[0].url = pool_url.clone();
+                if let Some(user) = &args.user {
+                    self.pools.pools[0].username = user.clone();
+                }
+                if let Some(pass) = &args.pass {
+                    self.pools.pools[0].password = pass.clone();
+                }
+            }
+        } else {
+            // 如果没有指定矿池URL但指定了用户名或密码，应用到第一个矿池
+            if !self.pools.pools.is_empty() {
+                if let Some(user) = &args.user {
+                    self.pools.pools[0].username = user.clone();
+                }
+                if let Some(pass) = &args.pass {
+                    self.pools.pools[0].password = pass.clone();
+                }
+            }
+        }
+
+        // 处理代理配置
+        if let Some(proxy_url) = &args.proxy {
+            let proxy_config = self.parse_proxy_url(proxy_url, args)?;
+
+            // 应用代理配置到所有启用的矿池
+            for pool in &mut self.pools.pools {
+                if pool.enabled {
+                    pool.proxy = Some(proxy_config.clone());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 解析代理URL并创建代理配置
+    fn parse_proxy_url(&self, proxy_url: &str, args: &Args) -> Result<ProxyConfig> {
+        use url::Url;
+
+        let parsed_url = Url::parse(proxy_url)
+            .with_context(|| format!("Invalid proxy URL: {}", proxy_url))?;
+
+        let proxy_type = match parsed_url.scheme() {
+            "socks5" => "socks5".to_string(),
+            "socks5+tls" => "socks5+tls".to_string(),
+            scheme => {
+                anyhow::bail!("Unsupported proxy scheme: {}. Use 'socks5' or 'socks5+tls'", scheme);
+            }
+        };
+
+        let host = parsed_url.host_str()
+            .ok_or_else(|| anyhow::anyhow!("Proxy URL must include a host"))?
+            .to_string();
+
+        let port = parsed_url.port()
+            .ok_or_else(|| anyhow::anyhow!("Proxy URL must include a port"))?;
+
+        // 优先使用CLI参数中的认证信息，其次使用URL中的认证信息
+        let username = args.proxy_user.clone()
+            .or_else(|| {
+                if parsed_url.username().is_empty() {
+                    None
+                } else {
+                    Some(parsed_url.username().to_string())
+                }
+            });
+
+        let password = args.proxy_pass.clone()
+            .or_else(|| parsed_url.password().map(|p| p.to_string()));
+
+        Ok(ProxyConfig {
+            proxy_type,
+            host,
+            port,
+            username,
+            password,
+        })
+    }
+
     #[allow(dead_code)]
     pub fn save(&self, path: &str) -> Result<()> {
         let config_content = toml::to_string_pretty(self)
@@ -441,18 +605,18 @@ impl Config {
         }
 
         // 验证Bitcoin软算法核心配置
-        if let Some(btc_software_config) = &self.cores.btc_software {
-            if btc_software_config.enabled {
-                if btc_software_config.device_count == 0 {
+        if let Some(cpu_btc_config) = &self.cores.cpu_btc {
+            if cpu_btc_config.enabled {
+                if cpu_btc_config.device_count == 0 {
                     anyhow::bail!("Bitcoin software core device count must be greater than 0");
                 }
-                if btc_software_config.device_count > 100 {
+                if cpu_btc_config.device_count > 100 {
                     anyhow::bail!("Bitcoin software core device count cannot exceed 100");
                 }
-                if btc_software_config.min_hashrate >= btc_software_config.max_hashrate {
+                if cpu_btc_config.min_hashrate >= cpu_btc_config.max_hashrate {
                     anyhow::bail!("Bitcoin software core min_hashrate must be less than max_hashrate");
                 }
-                if btc_software_config.error_rate < 0.0 || btc_software_config.error_rate > 1.0 {
+                if cpu_btc_config.error_rate < 0.0 || cpu_btc_config.error_rate > 1.0 {
                     anyhow::bail!("Bitcoin software core error_rate must be between 0.0 and 1.0");
                 }
             }
