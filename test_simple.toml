@@ -152,7 +152,7 @@ retry_interval = 10
 # 矿池列表 - F2Pool 配置 (适配软算法核心)
 # F2Pool支持软算法核心产生的真实份额提交
 [[pools.pools]]
-url = "stratum+tcp://192.168.18.240:10203"
+url = "stratum+tcp://btc.f2pool.com:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 1

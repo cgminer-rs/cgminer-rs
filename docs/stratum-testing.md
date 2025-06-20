@@ -23,7 +23,7 @@ stratum+tcp://服务器地址:端口
 
 示例：
 - `stratum+tcp://btc.f2pool.com:1314` - F2Pool BTC 矿池
-- `stratum+tcp://192.168.18.240:10203` - 本地或内网矿池
+- `stratum+tcp://127.0.0.1:1314` - 本地或内网矿池
 - `stratum+tcp://pool.example.com:4444` - 通用矿池
 
 ## 测试工具使用
@@ -41,26 +41,26 @@ cargo build --release --bin test-stratum-connection
 ### 基本使用
 
 ```bash
-# 测试默认地址 (192.168.18.240:10203)
+# 测试默认地址 (btc.f2pool.com:1314)
 cargo run --bin test-stratum-connection
 
 # 测试指定地址
-cargo run --bin test-stratum-connection -- --url "stratum+tcp://192.168.18.240:10203"
+cargo run --bin test-stratum-connection -- --url "stratum+tcp://btc.f2pool.com:1314"
 
 # 使用自定义用户名和密码
 cargo run --bin test-stratum-connection -- \
-  --url "stratum+tcp://192.168.18.240:10203" \
+  --url "stratum+tcp://btc.f2pool.com:1314" \
   --username "test.worker" \
   --password "x"
 
 # 显示详细输出
 cargo run --bin test-stratum-connection -- \
-  --url "stratum+tcp://192.168.18.240:10203" \
+  --url "stratum+tcp://btc.f2pool.com:1314" \
   --verbose
 
 # 设置连接超时
 cargo run --bin test-stratum-connection -- \
-  --url "stratum+tcp://192.168.18.240:10203" \
+  --url "stratum+tcp://btc.f2pool.com:1314" \
   --timeout 30
 ```
 
@@ -68,7 +68,7 @@ cargo run --bin test-stratum-connection -- \
 
 | 参数 | 短参数 | 默认值 | 说明 |
 |------|--------|--------|------|
-| `--url` | `-u` | `stratum+tcp://192.168.18.240:10203` | Stratum 服务器 URL |
+| `--url` | `-u` | `stratum+tcp://btc.f2pool.com:1314` | Stratum 服务器 URL |
 | `--username` | `-u` | `test.worker` | 测试用户名 |
 | `--password` | `-p` | `x` | 测试密码 |
 | `--timeout` | `-t` | `10` | 连接超时时间（秒） |
@@ -106,12 +106,12 @@ cargo run --bin test-stratum-connection -- \
 🔍 Stratum 协议测试工具
 ═══════════════════════════════════════════════════════════
 📋 测试配置:
-   URL: stratum+tcp://192.168.18.240:10203
+   URL: stratum+tcp://btc.f2pool.com:1314
    用户名: test.worker
    密码: x
    超时: 10 秒
 
-🔗 正在连接到: 192.168.18.240:10203
+🔗 正在连接到: btc.f2pool.com:1314
 ✅ TCP 连接成功
 ✅ Stratum 协议测试成功
 📊 矿池信息:
@@ -160,7 +160,7 @@ cargo run --bin test-stratum-connection -- \
 
 ```toml
 [[pools.pools]]
-url = "stratum+tcp://192.168.18.240:10203"
+url = "stratum+tcp://btc.f2pool.com:1314"
 user = "your_username.worker"
 password = "your_password"
 priority = 1
@@ -177,7 +177,7 @@ enabled = true
 #!/bin/bash
 
 pools=(
-    "stratum+tcp://192.168.18.240:10203"
+    "stratum+tcp://btc.f2pool.com:1314"
     "stratum+tcp://btc.f2pool.com:1314"
     "stratum+tcp://btc-asia.f2pool.com:1314"
 )
@@ -195,7 +195,7 @@ done
 
 ```bash
 time cargo run --release --bin test-stratum-connection -- \
-  --url "stratum+tcp://192.168.18.240:10203"
+  --url "stratum+tcp://btc.f2pool.com:1314"
 ```
 
 ## 故障排除
