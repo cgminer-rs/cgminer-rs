@@ -469,7 +469,7 @@ impl cgminer_rs::device::MiningDevice for TestMiningDevice {
     }
 }
 
-// ==================== Bitcoin软算法核心集成测试 (cgminer-s-btc-core) ====================
+// ==================== Bitcoin软算法核心集成测试 (cgminer-cpu-btc-core) ====================
 
 /// 创建测试用的工作
 fn create_test_work(id: u64) -> Work {

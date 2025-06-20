@@ -1,4 +1,4 @@
-//! Bitcoin软算法核心主项目测试 (cgminer-s-btc-core)
+//! Bitcoin软算法核心主项目测试 (cgminer-cpu-btc-core)
 //!
 //! 测试主项目中Bitcoin软算法核心的集成和配置功能
 

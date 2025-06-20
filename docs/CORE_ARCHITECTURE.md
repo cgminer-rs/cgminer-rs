@@ -7,8 +7,8 @@ CGMiner-RS 采用了模块化的核心架构，将不同类型的挖矿设备驱
 ```
 cgminer-rs (主程序)
 ├── cgminer-core (核心特征和类型定义)
-├── cgminer-s-btc-core (软算法Bitcoin挖矿核心)
-├── cgminer-a-maijie-l7-core (Maijie L7 ASIC硬件挖矿核心)
+├── cgminer-cpu-btc-core (软算法Bitcoin挖矿核心)
+├── cgminer-asic-maijie-l7-core (Maijie L7 ASIC硬件挖矿核心)
 └── 其他核心库...
 ```
 
@@ -23,7 +23,7 @@ cgminer-rs (主程序)
 - `CoreRegistry` - 核心注册表
 - 基础类型：`Work`, `MiningResult`, `HashRate`, `Temperature` 等
 
-### 2. cgminer-s-btc-core
+### 2. cgminer-cpu-btc-core
 软算法挖矿核心，使用CPU进行真实的SHA256算法计算：
 
 - 支持多个虚拟设备
@@ -37,7 +37,7 @@ cgminer-rs (主程序)
 - 模拟的温度、电压、频率监控
 - 支持批量处理以优化性能
 
-### 3. cgminer-a-maijie-l7-core
+### 3. cgminer-asic-maijie-l7-core
 ASIC硬件挖矿核心，支持真实的ASIC矿机：
 
 - 支持Maijie L7等ASIC矿机
@@ -118,7 +118,7 @@ batch_size = 1000
 work_timeout_ms = 5000
 ```
 
-#### ASIC核心配置 (cgminer-a-maijie-l7-core.toml)
+#### ASIC核心配置 (cgminer-asic-maijie-l7-core.toml)
 ```toml
 [cores]
 enabled_cores = ["asic"]

@@ -43,7 +43,7 @@ enabled_cores = ["btc-software"]
 # 软算法核心使用CPU进行真实的比特币挖矿计算，产生可用的挖矿数据
 default_core = "btc-software"
 
-# Bitcoin软算法核心配置 (cgminer-s-btc-core)
+# Bitcoin软算法核心配置 (cgminer-cpu-btc-core)
 # Bitcoin软算法核心特点:
 # - 使用真实的SHA256算法进行CPU挖矿
 # - 产生真实可用的挖矿数据和份额
@@ -80,7 +80,7 @@ load_balancing = true        # 启用负载均衡
 cpu_usage_target = 0.8       # 目标CPU使用率 80%
 # manual_mapping = { 0 = 0, 1 = 1, 2 = 2, 3 = 3 }  # 手动映射 (仅在strategy="manual"时使用)
 
-# Maijie L7 ASIC核心配置 (cgminer-a-maijie-l7-core)
+# Maijie L7 ASIC核心配置 (cgminer-asic-maijie-l7-core)
 # 注意: 在Mac环境下通常不可用，主要用于Linux环境的Maijie L7设备
 [cores.maijie_l7]
 enabled = false              # 默认禁用ASIC核心

@@ -1,8 +1,8 @@
 //! 重命名后核心库的端到端集成测试
 //!
 //! 测试重命名后的核心库：
-//! - cgminer-s-btc-core (Bitcoin软算法核心)
-//! - cgminer-a-maijie-l7-core (Maijie L7 ASIC核心)
+//! - cgminer-cpu-btc-core (Bitcoin软算法核心)
+//! - cgminer-asic-maijie-l7-core (Maijie L7 ASIC核心)
 
 use cgminer_rs::Config;
 use std::time::Duration;
@@ -131,22 +131,22 @@ async fn test_core_feature_detection() {
 
     #[cfg(feature = "btc-software")]
     {
-        println!("✅ Bitcoin软算法核心 (cgminer-s-btc-core) 已启用");
+        println!("✅ Bitcoin软算法核心 (cgminer-cpu-btc-core) 已启用");
     }
 
     #[cfg(not(feature = "btc-software"))]
     {
-        println!("❌ Bitcoin软算法核心 (cgminer-s-btc-core) 未启用");
+        println!("❌ Bitcoin软算法核心 (cgminer-cpu-btc-core) 未启用");
     }
 
     #[cfg(feature = "maijie-l7")]
     {
-        println!("✅ Maijie L7 ASIC核心 (cgminer-a-maijie-l7-core) 已启用");
+        println!("✅ Maijie L7 ASIC核心 (cgminer-asic-maijie-l7-core) 已启用");
     }
 
     #[cfg(not(feature = "maijie-l7"))]
     {
-        println!("❌ Maijie L7 ASIC核心 (cgminer-a-maijie-l7-core) 未启用");
+        println!("❌ Maijie L7 ASIC核心 (cgminer-asic-maijie-l7-core) 未启用");
     }
 
     #[cfg(feature = "all-cores")]

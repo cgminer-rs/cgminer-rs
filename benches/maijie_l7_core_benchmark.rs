@@ -1,4 +1,4 @@
-//! Maijie L7 ASIC核心性能基准测试 (cgminer-a-maijie-l7-core)
+//! Maijie L7 ASIC核心性能基准测试 (cgminer-asic-maijie-l7-core)
 //!
 //! 这个基准测试评估Maijie L7 ASIC核心的各种性能指标，包括：
 //! - ASIC设备通信性能
@@ -8,7 +8,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
 use cgminer_core::{DeviceInfo, DeviceConfig, MiningDevice, Work};
-use cgminer_a_maijie_l7_core::{
+use cgminer_asic_maijie_l7_core::{
     MaijieL7MiningCore, MaijieL7Device,
     chain::{ChainManager, ChainConfig}
 };

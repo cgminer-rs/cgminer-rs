@@ -3,7 +3,7 @@
 
 [build]
 # 默认使用所有CPU核心进行并行编译
-jobs = 0
+# jobs = 0  # 注释掉，让 Cargo 自动决定
 
 # 平台特定的编译器标志
 [target.aarch64-apple-darwin]
@@ -12,24 +12,7 @@ rustflags = [
     # 使用原生CPU特性
     "-C", "target-cpu=apple-m1",
     # 启用硬件加速特性
-    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+sha3,+crc",
-    # 最高优化级别
-    "-C", "opt-level=3",
-    # 单个代码生成单元以获得最佳优化
-    "-C", "codegen-units=1",
-    # 启用链接时优化
-    "-C", "lto=fat",
-    # 启用机器码优化
-    "-C", "llvm-args=-enable-machine-outliner=never",
-    "-C", "llvm-args=-enable-gvn-hoist",
-    "-C", "llvm-args=-enable-load-pre=true",
-    # 针对挖矿算法的数学优化
-    "-C", "llvm-args=-enable-unsafe-fp-math",
-    "-C", "llvm-args=-fast-math",
-    # 内存访问优化
-    "-C", "llvm-args=-enable-aa-sched-mi",
-    # 分支预测优化
-    "-C", "llvm-args=-enable-misched",
+    "-C", "target-feature=+neon,+crypto,+aes,+sha2,+crc",
 ]
 
 [target.x86_64-apple-darwin]
@@ -37,9 +20,6 @@ rustflags = [
 rustflags = [
     "-C", "target-cpu=native",
     "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2",
-    "-C", "opt-level=3",
-    "-C", "codegen-units=1",
-    "-C", "lto=fat",
 ]
 
 [target.x86_64-unknown-linux-gnu]
@@ -47,12 +27,6 @@ rustflags = [
 rustflags = [
     "-C", "target-cpu=native",
     "-C", "target-feature=+aes,+sha,+sse4.2,+avx2,+bmi2,+fma",
-    "-C", "opt-level=3",
-    "-C", "codegen-units=1",
-    "-C", "lto=fat",
-    # Linux 特定优化
-    "-C", "llvm-args=-enable-load-pre=true",
-    "-C", "llvm-args=-enable-gvn-hoist",
 ]
 
 [target.aarch64-unknown-linux-gnu]
@@ -60,9 +34,6 @@ rustflags = [
 rustflags = [
     "-C", "target-cpu=native",
     "-C", "target-feature=+neon,+crypto,+aes,+sha2,+crc",
-    "-C", "opt-level=3",
-    "-C", "codegen-units=1",
-    "-C", "lto=fat",
 ]
 
 [target.x86_64-pc-windows-msvc]
@@ -70,9 +41,6 @@ rustflags = [
 rustflags = [
     "-C", "target-cpu=native",
     "-C", "target-feature=+aes,+sha,+sse4.2,+avx2",
-    "-C", "opt-level=3",
-    "-C", "codegen-units=1",
-    "-C", "lto=fat",
 ]
 
 # 环境变量设置
@@ -108,8 +76,7 @@ profile-build = "build --release --features=profiling"
 [net]
 # 重试次数
 retry = 3
-# 超时设置
-timeout = 30000
+# 超时设置 (移除 timeout 配置，使用默认值)
 
 # HTTP 配置
 [http]

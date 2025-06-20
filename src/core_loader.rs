@@ -6,10 +6,13 @@ use std::sync::{Arc, RwLock};
 use tracing::{info, warn, error, debug};
 
 #[cfg(feature = "btc-software")]
-use cgminer_s_btc_core;
+use cgminer_cpu_btc_core;
 
 #[cfg(feature = "maijie-l7")]
-use cgminer_a_maijie_l7_core;
+use cgminer_asic_maijie_l7_core;
+
+#[cfg(feature = "btc-gpu")]
+use cgminer_gpu_btc_core;
 
 /// 核心加载器
 pub struct CoreLoader {
@@ -53,6 +56,14 @@ impl CoreLoader {
             }
         }
 
+        // 加载GPU Bitcoin核心
+        #[cfg(feature = "btc-gpu")]
+        {
+            if let Err(e) = self.load_gpu_btc_core().await {
+                error!("加载GPU Bitcoin核心失败: {}", e);
+            }
+        }
+
         // 尝试动态加载其他核心
         if let Err(e) = self.load_dynamic_cores().await {
             warn!("动态加载核心失败: {}", e);
@@ -70,7 +81,7 @@ impl CoreLoader {
     async fn load_btc_software_core(&self) -> Result<(), CoreError> {
         info!("加载Bitcoin软算法核心");
 
-        let factory = cgminer_s_btc_core::create_factory();
+        let factory = cgminer_cpu_btc_core::create_factory();
         let core_info = factory.core_info();
 
         self.registry.register_factory("btc-software".to_string(), factory).await?;
@@ -91,7 +102,7 @@ impl CoreLoader {
     async fn load_maijie_l7_core(&self) -> Result<(), CoreError> {
         info!("加载Maijie L7 ASIC核心");
 
-        let factory = cgminer_a_maijie_l7_core::create_factory();
+        let factory = cgminer_asic_maijie_l7_core::create_factory();
         let core_info = factory.core_info();
 
         self.registry.register_factory("maijie-l7".to_string(), factory).await?;
@@ -104,6 +115,27 @@ impl CoreLoader {
         }
 
         info!("Maijie L7 ASIC核心加载成功: {}", core_info.name);
+        Ok(())
+    }
+
+    /// 加载GPU Bitcoin核心
+    #[cfg(feature = "btc-gpu")]
+    async fn load_gpu_btc_core(&self) -> Result<(), CoreError> {
+        info!("加载GPU Bitcoin核心");
+
+        let factory = cgminer_gpu_btc_core::create_factory();
+        let core_info = factory.core_info();
+
+        self.registry.register_factory("btc-gpu".to_string(), factory).await?;
+
+        {
+            let mut loaded = self.loaded_cores.write().map_err(|e| {
+                CoreError::runtime(format!("Failed to acquire write lock: {}", e))
+            })?;
+            loaded.insert("btc-gpu".to_string(), core_info.core_type);
+        }
+
+        info!("GPU Bitcoin核心加载成功: {}", core_info.name);
         Ok(())
     }
 
@@ -246,6 +278,8 @@ impl CoreLoader {
             "btc-software" => self.load_btc_software_core().await?,
             #[cfg(feature = "maijie-l7")]
             "maijie-l7" => self.load_maijie_l7_core().await?,
+            #[cfg(feature = "btc-gpu")]
+            "btc-gpu" => self.load_gpu_btc_core().await?,
             _ => {
                 return Err(CoreError::runtime(format!("未知的核心类型: {}", name)));
             }

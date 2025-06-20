@@ -1,9 +1,4 @@
-[workspace]
-members = [
-    "cgminer-core",
-    "cgminer-s-btc-core",
-    "cgminer-a-maijie-l7-core"
-]
+# 移除 workspace 配置，因为内核模块现在在外部目录
 
 [package]
 name = "cgminer-rs"
@@ -17,10 +12,11 @@ keywords = ["bitcoin", "mining", "asic", "cryptocurrency"]
 categories = ["hardware-support", "network-programming"]
 
 [dependencies]
-# Core libraries
-cgminer-core = { path = "cgminer-core" }
-cgminer-s-btc-core = { path = "cgminer-s-btc-core", optional = true }
-cgminer-a-maijie-l7-core = { path = "cgminer-a-maijie-l7-core", optional = true }
+# Core libraries - 指向外部目录
+cgminer-core = { path = "../cgminer-core" }
+cgminer-cpu-btc-core = { path = "../cgminer-cpu-btc-core", optional = true }
+cgminer-gpu-btc-core = { path = "../cgminer-gpu-btc-core", optional = true }
+cgminer-asic-maijie-l7-core = { path = "../cgminer-asic-maijie-l7-core", optional = true }
 
 # Async runtime
 tokio = { version = "1.0", features = ["full"] }
@@ -155,16 +151,18 @@ overflow-checks = true
 # 这里的 cfg() 语法在 Cargo.toml 中不被支持，需要使用具体的目标三元组
 
 [features]
-default = ["btc-software"]
+default = ["btc-gpu"]
 
-# 重命名后的特性
-btc-software = ["cgminer-s-btc-core"]
-maijie-l7 = ["cgminer-a-maijie-l7-core"]
+# 核心特性
+btc-software = ["cgminer-cpu-btc-core"]
+btc-gpu = ["cgminer-gpu-btc-core"]
+maijie-l7 = ["cgminer-asic-maijie-l7-core"]
 
 # 组合特性
-all-cores = ["btc-software", "maijie-l7"]
-hardware-only = ["maijie-l7"]
+all-cores = ["btc-software", "btc-gpu", "maijie-l7"]
+hardware-only = ["btc-gpu", "maijie-l7"]
 software-only = ["btc-software"]
+gpu-only = ["btc-gpu"]
 
 # 其他特性
 web-ui = []
@@ -179,3 +177,8 @@ required-features = ["btc-software"]
 name = "maijie_l7_core_benchmark"
 harness = false
 required-features = ["maijie-l7"]
+
+[[bench]]
+name = "gpu_btc_core_benchmark"
+harness = false
+required-features = ["btc-gpu"]
