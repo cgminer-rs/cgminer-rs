@@ -117,7 +117,7 @@ impl DeviceManager {
 
     /// 初始化设备管理器
     pub async fn initialize(&mut self) -> Result<(), DeviceError> {
-        info!("🔧 初始化设备管理器");
+        debug!("🔧 初始化设备管理器");
 
         // 检查活跃核心
         if self.active_core_ids.is_empty() {
@@ -127,7 +127,7 @@ impl DeviceManager {
             });
         }
 
-        info!("🎉 设备管理器初始化完成，活跃核心数量: {}", self.active_core_ids.len());
+        debug!("🎉 设备管理器初始化完成，活跃核心数量: {}", self.active_core_ids.len());
 
         // 创建设备
         self.create_devices().await?;
@@ -138,7 +138,7 @@ impl DeviceManager {
 
     /// 创建设备
     async fn create_devices(&mut self) -> Result<(), DeviceError> {
-        info!("🔧 创建设备");
+        debug!("🔧 创建设备");
 
         // 直接从core_registry获取可用核心工厂
         let available_cores = self.core_registry.list_factories().await.map_err(|e| {
@@ -153,13 +153,13 @@ impl DeviceManager {
             return Ok(());
         }
 
-        info!("📋 可用挖矿核心: {:?}", available_cores.iter().map(|c| &c.name).collect::<Vec<_>>());
+        debug!("📋 可用挖矿核心: {:?}", available_cores.iter().map(|c| &c.name).collect::<Vec<_>>());
 
         // 为每个核心扫描并创建设备
         for core in available_cores {
             match self.create_devices_for_core(&core).await {
                 Ok(device_count) => {
-                    info!("✅ 核心 {} 创建了 {} 个设备", core.name, device_count);
+                    debug!("✅ 核心 {} 创建了 {} 个设备", core.name, device_count);
                 }
                 Err(e) => {
                     error!("❌ 核心 {} 设备创建失败: {}", core.name, e);
@@ -168,14 +168,14 @@ impl DeviceManager {
         }
 
         let total_device_count = self.devices.read().await.len();
-        info!("🎯 设备创建完成，共创建 {} 个设备", total_device_count);
+        info!("🎯 设备初始化完成，共创建 {} 个挖矿设备", total_device_count);
 
         Ok(())
     }
 
     /// 为指定核心创建设备
     async fn create_devices_for_core(&mut self, core: &cgminer_core::CoreInfo) -> Result<u32, DeviceError> {
-        info!("🔍 为核心 {} 扫描设备", core.name);
+        debug!("🔍 为核心 {} 扫描设备", core.name);
 
         // 查找对应的活跃核心实例ID
         let core_instance_id = self.find_active_core_for_factory(&core.name).await?;
@@ -215,7 +215,7 @@ impl DeviceManager {
             .create_device_mappings_for_core(core, devices_to_create.clone())
             .await?;
 
-        info!("📋 为核心 {} 创建了 {} 个设备映射", core.name, mappings.len());
+        debug!("📋 为核心 {} 创建了 {} 个设备映射", core.name, mappings.len());
 
         let mut created_count = 0u32;
         for (mapping, device_info) in mappings.into_iter().zip(devices_to_create.into_iter()) {

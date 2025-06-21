@@ -155,18 +155,31 @@ impl ProxyConnector {
                proxy.host, proxy.port, target_host, target_port);
 
         // 首先建立SOCKS5连接
-        let socks5_stream = self.connect_socks5_stream(proxy, target_host, target_port).await?;
+        debug!("🔗 第一步：建立SOCKS5连接到代理服务器");
+        let socks5_stream = self.connect_socks5_stream(proxy, target_host, target_port).await.map_err(|e| {
+            debug!("❌ SOCKS5连接失败: {}", e);
+            e
+        })?;
+        debug!("✅ SOCKS5连接建立成功");
 
         // 在SOCKS5连接上建立TLS
-        debug!("🔐 在SOCKS5连接上建立TLS连接");
-        let tls_connector = TlsConnector::from(native_tls::TlsConnector::new().map_err(|e| PoolError::ConnectionFailed {
-            url: format!("socks5+tls://{}:{}", proxy.host, proxy.port),
-            error: format!("TLS connector creation failed: {}", e),
+        debug!("🔐 第二步：在SOCKS5连接上建立TLS连接到目标主机: {}", target_host);
+        let tls_connector = TlsConnector::from(native_tls::TlsConnector::new().map_err(|e| {
+            let error_msg = format!("TLS connector creation failed: {}", e);
+            debug!("❌ {}", error_msg);
+            PoolError::ConnectionFailed {
+                url: format!("socks5+tls://{}:{}", proxy.host, proxy.port),
+                error: error_msg,
+            }
         })?);
 
-        let tls_stream = tls_connector.connect(target_host, socks5_stream).await.map_err(|e| PoolError::ConnectionFailed {
-            url: format!("socks5+tls://{}:{}", proxy.host, proxy.port),
-            error: format!("TLS handshake failed: {}", e),
+        let tls_stream = tls_connector.connect(target_host, socks5_stream).await.map_err(|e| {
+            let error_msg = format!("TLS handshake failed: {}", e);
+            debug!("❌ {}", error_msg);
+            PoolError::ConnectionFailed {
+                url: format!("socks5+tls://{}:{}", proxy.host, proxy.port),
+                error: error_msg,
+            }
         })?;
 
         info!("✅ SOCKS5+TLS代理连接建立成功: {}:{} -> {}:{}",
@@ -183,20 +196,32 @@ impl ProxyConnector {
             proxy.port,
         );
 
+        debug!("🔗 连接到SOCKS5代理服务器: {}", proxy_addr);
+
         if let (Some(username), Some(password)) = (&proxy.username, &proxy.password) {
+            debug!("🔐 使用用户名密码认证连接SOCKS5代理");
             Socks5Stream::connect_with_password(
                 proxy_addr,
                 (target_host, target_port),
                 username,
                 password,
-            ).await.map_err(|e| PoolError::ConnectionFailed {
-                url: format!("socks5://{}:{}", proxy.host, proxy.port),
-                error: e.to_string(),
+            ).await.map_err(|e| {
+                let error_msg = format!("SOCKS5认证连接失败: {}", e);
+                debug!("❌ {}", error_msg);
+                PoolError::ConnectionFailed {
+                    url: format!("socks5://{}:{}", proxy.host, proxy.port),
+                    error: error_msg,
+                }
             })
         } else {
-            Socks5Stream::connect(proxy_addr, (target_host, target_port)).await.map_err(|e| PoolError::ConnectionFailed {
-                url: format!("socks5://{}:{}", proxy.host, proxy.port),
-                error: e.to_string(),
+            debug!("🔗 无认证连接SOCKS5代理");
+            Socks5Stream::connect(proxy_addr, (target_host, target_port)).await.map_err(|e| {
+                let error_msg = format!("SOCKS5连接失败: {}", e);
+                debug!("❌ {}", error_msg);
+                PoolError::ConnectionFailed {
+                    url: format!("socks5://{}:{}", proxy.host, proxy.port),
+                    error: error_msg,
+                }
             })
         }
     }
