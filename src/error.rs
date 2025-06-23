@@ -1,5 +1,11 @@
 use thiserror::Error;
 
+// 重新导出主要错误类型用于应用层
+pub use MiningError as Error;
+
+// 应用层Result类型别名
+pub type Result<T> = std::result::Result<T, MiningError>;
+
 #[derive(Error, Debug)]
 pub enum MiningError {
     #[error("Device error: {0}")]
