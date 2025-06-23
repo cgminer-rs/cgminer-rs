@@ -430,6 +430,8 @@ impl MiningManager {
         let handle = tokio::spawn(async move {
             let receiver = work_receiver.lock().await.take();
             if let Some(mut receiver) = receiver {
+                info!("📡 工作分发器已启动，等待工作...");
+
                 // 创建统一的工作分发器
                 let work_dispatcher = UnifiedWorkDispatcher::new(
                     core_registry.clone(),
@@ -439,19 +441,28 @@ impl MiningManager {
                 while *running.read().await {
                     match receiver.recv().await {
                         Some(work_item) => {
+                            info!("📨 收到新工作，ID: {}", work_item.work.id);
+
                             // 使用统一的工作分发逻辑
                             match work_dispatcher.dispatch_work(work_item).await {
                                 Ok(target) => {
-                                    debug!("Work successfully dispatched to: {}", target);
+                                    info!("✅ 工作成功分发到: {}", target);
                                 }
                                 Err(e) => {
-                                    warn!("Failed to dispatch work: {}", e);
+                                    error!("❌ 工作分发失败: {}", e);
                                 }
                             }
                         }
-                        None => break,
+                        None => {
+                            info!("📡 工作接收器关闭，退出分发循环");
+                            break;
+                        }
                     }
                 }
+
+                info!("📡 工作分发器已停止");
+            } else {
+                error!("❌ 无法获取工作接收器");
             }
         });
 
@@ -914,45 +925,68 @@ impl UnifiedWorkDispatcher {
     /// 分发工作
     /// 优先级：活跃核心 > 指定设备 > 任意可用设备
     pub async fn dispatch_work(&self, work_item: WorkItem) -> Result<String, String> {
+        info!("🚀 开始统一工作分发，工作ID: {}", work_item.work.id);
+
         // 1. 优先尝试分发到活跃的核心
+        info!("🎯 第一步：尝试分发到活跃核心...");
         match self.dispatch_to_cores(&work_item).await {
-            Ok(target) => return Ok(target),
-            Err(e) => debug!("Core dispatch failed: {}", e),
+            Ok(target) => {
+                info!("✅ 工作成功分发到: {}", target);
+                return Ok(target);
+            }
+            Err(e) => {
+                warn!("⚠️  核心分发失败: {}", e);
+            }
         }
 
         // 2. 如果核心分发失败，尝试分发到设备
+        info!("🎯 第二步：尝试分发到设备...");
         match self.dispatch_to_devices(&work_item).await {
-            Ok(target) => return Ok(target),
-            Err(e) => debug!("Device dispatch failed: {}", e),
+            Ok(target) => {
+                info!("✅ 工作成功分发到: {}", target);
+                return Ok(target);
+            }
+            Err(e) => {
+                warn!("⚠️  设备分发失败: {}", e);
+            }
         }
 
+        error!("💥 工作分发完全失败：没有可用的核心或设备");
         Err("No available cores or devices for work dispatch".to_string())
     }
 
     /// 分发工作到核心
     async fn dispatch_to_cores(&self, work_item: &WorkItem) -> Result<String, String> {
+        info!("🔍 开始分发工作到核心...");
+
         let active_core_ids = self.core_registry.list_active_cores().await
             .map_err(|e| format!("Failed to list active cores: {}", e))?;
 
+        info!("📋 发现 {} 个活跃核心", active_core_ids.len());
+
         if active_core_ids.is_empty() {
+            warn!("⚠️  没有活跃的核心可用于工作分发");
             return Err("No active cores available".to_string());
         }
 
-        debug!("Found {} active cores for work distribution", active_core_ids.len());
+        info!("🎯 活跃核心列表: {:?}", active_core_ids);
 
         // 使用轮询策略分发到核心
         for core_id in &active_core_ids {
+            info!("📤 尝试向核心 {} 提交工作...", core_id);
             match self.core_registry.submit_work_to_core(core_id, work_item.work.clone()).await {
                 Ok(()) => {
+                    info!("✅ 工作成功分发到核心: {}", core_id);
                     return Ok(format!("core:{}", core_id));
                 }
                 Err(e) => {
-                    debug!("Failed to submit work to core {}: {}", core_id, e);
+                    warn!("❌ 向核心 {} 提交工作失败: {}", core_id, e);
                     continue;
                 }
             }
         }
 
+        warn!("💥 所有核心都拒绝了工作");
         Err("All cores rejected the work".to_string())
     }
 

@@ -30,10 +30,10 @@ impl Default for HashmeterConfig {
     fn default() -> Self {
         Self {
             enabled: true, // 默认启用
-            log_interval: 30, // 30秒间隔，类似传统cgminer
+            log_interval: 5, // 5秒间隔，更频繁的统计
             per_device_stats: true,
             console_output: true,
-            beautiful_output: true,
+            beautiful_output: false, // 默认使用传统格式
             hashrate_unit: "AUTO".to_string(),
         }
     }
@@ -42,8 +42,10 @@ impl Default for HashmeterConfig {
 /// 算力统计数据
 #[derive(Debug, Clone)]
 pub struct HashrateStats {
-    /// 当前算力 (H/s)
+    /// 当前算力 (H/s) - 用于5秒统计
     pub current_hashrate: f64,
+    /// 5秒平均算力
+    pub avg_5s: f64,
     /// 1分钟平均算力
     pub avg_1m: f64,
     /// 5分钟平均算力
@@ -96,6 +98,7 @@ impl Hashmeter {
             last_log_time: Arc::new(RwLock::new(start_time)),
             total_stats: Arc::new(RwLock::new(HashrateStats {
                 current_hashrate: 0.0,
+                avg_5s: 0.0,
                 avg_1m: 0.0,
                 avg_5m: 0.0,
                 avg_15m: 0.0,
@@ -164,6 +167,31 @@ impl Hashmeter {
         let mut stats = self.total_stats.write().await;
 
         stats.current_hashrate = mining_metrics.total_hashrate;
+        stats.avg_5s = mining_metrics.total_hashrate; // 使用当前算力作为5秒算力
+
+        // 计算滑动窗口算力（简单的指数移动平均）
+        let alpha_1m = 0.1;
+        let alpha_5m = 0.02;
+        let alpha_15m = 0.007;
+
+        if stats.avg_1m == 0.0 {
+            stats.avg_1m = mining_metrics.total_hashrate;
+        } else {
+            stats.avg_1m = stats.avg_1m * (1.0 - alpha_1m) + mining_metrics.total_hashrate * alpha_1m;
+        }
+
+        if stats.avg_5m == 0.0 {
+            stats.avg_5m = mining_metrics.total_hashrate;
+        } else {
+            stats.avg_5m = stats.avg_5m * (1.0 - alpha_5m) + mining_metrics.total_hashrate * alpha_5m;
+        }
+
+        if stats.avg_15m == 0.0 {
+            stats.avg_15m = mining_metrics.total_hashrate;
+        } else {
+            stats.avg_15m = stats.avg_15m * (1.0 - alpha_15m) + mining_metrics.total_hashrate * alpha_15m;
+        }
+
         stats.accepted_shares = mining_metrics.accepted_shares;
         stats.rejected_shares = mining_metrics.rejected_shares;
         stats.hardware_errors = mining_metrics.hardware_errors;
@@ -189,6 +217,7 @@ impl Hashmeter {
             device_name: format!("Device {}", device_stats_core.device_id),
             stats: HashrateStats {
                 current_hashrate: device_stats_core.current_hashrate.hashes_per_second,
+                avg_5s: device_stats_core.current_hashrate.hashes_per_second, // 使用当前算力作为5秒算力
                 avg_1m: device_stats_core.hashrate_1m.hashes_per_second,
                 avg_5m: device_stats_core.hashrate_5m.hashes_per_second,
                 avg_15m: device_stats_core.hashrate_15m.hashes_per_second,
@@ -229,7 +258,7 @@ impl Hashmeter {
         devices: &HashMap<u32, DeviceHashrateStats>,
         config: &HashmeterConfig,
     ) {
-        let current_hashrate = Self::format_hashrate(stats.current_hashrate, &config.hashrate_unit);
+        let avg_5s = Self::format_hashrate(stats.avg_5s, &config.hashrate_unit);
         let avg_1m = Self::format_hashrate(stats.avg_1m, &config.hashrate_unit);
         let avg_5m = Self::format_hashrate(stats.avg_5m, &config.hashrate_unit);
         let avg_15m = Self::format_hashrate(stats.avg_15m, &config.hashrate_unit);
@@ -237,7 +266,7 @@ impl Hashmeter {
         let reject_rate = Self::calculate_reject_rate(stats.accepted_shares, stats.rejected_shares);
 
         info!("⚡ Mining Status Update:");
-        info!("   📈 Hashrate: {} (Current)", current_hashrate);
+        info!("   📈 Hashrate: {} (5s)", avg_5s);
         info!("   📊 Averages: {} (1m) | {} (5m) | {} (15m)", avg_1m, avg_5m, avg_15m);
         info!("   🎯 Shares: {} accepted, {} rejected ({:.2}% reject rate)",
               stats.accepted_shares, stats.rejected_shares, reject_rate);
@@ -248,11 +277,11 @@ impl Hashmeter {
         if config.per_device_stats && !devices.is_empty() {
             info!("   📊 Device Details:");
             for device in devices.values() {
-                let device_current = Self::format_hashrate(device.stats.current_hashrate, &config.hashrate_unit);
+                let device_5s = Self::format_hashrate(device.stats.avg_5s, &config.hashrate_unit);
                 let device_1m = Self::format_hashrate(device.stats.avg_1m, &config.hashrate_unit);
                 let device_5m = Self::format_hashrate(device.stats.avg_5m, &config.hashrate_unit);
                 info!("      • {}: {} | 1m: {} | 5m: {} | Temp: {:.1}°C | Fan: {}%",
-                      device.device_name, device_current, device_1m, device_5m,
+                      device.device_name, device_5s, device_1m, device_5m,
                       device.temperature, device.fan_speed);
             }
         }
@@ -264,35 +293,34 @@ impl Hashmeter {
         devices: &HashMap<u32, DeviceHashrateStats>,
         config: &HashmeterConfig,
     ) {
-        let current_hashrate = Self::format_hashrate(stats.current_hashrate, &config.hashrate_unit);
+        let avg_5s = Self::format_hashrate(stats.avg_5s, &config.hashrate_unit);
         let avg_1m = Self::format_hashrate(stats.avg_1m, &config.hashrate_unit);
         let avg_5m = Self::format_hashrate(stats.avg_5m, &config.hashrate_unit);
         let avg_15m = Self::format_hashrate(stats.avg_15m, &config.hashrate_unit);
-        let uptime_display = Self::format_uptime(stats.uptime);
+        let device_count = devices.len();
 
-        // 类似cgminer的状态行格式，显示滑动窗口算力
-        info!("({}s):{} (1m):{} (5m):{} (15m):{} | A:{} R:{} HW:{} WU:{:.1}/m | {}",
+        // cgminer风格的状态行格式: (5s):16.896Mh/s (1m):12.374Mh/s (5m):9.649Mh/s (15m):9.054Mh/s A:782 R:0 HW:0 [16DEV]
+        info!("({}s):{} (1m):{} (5m):{} (15m):{} A:{} R:{} HW:{} [{}DEV]",
               config.log_interval,
-              current_hashrate,
+              avg_5s,
               avg_1m,
               avg_5m,
               avg_15m,
               stats.accepted_shares,
               stats.rejected_shares,
               stats.hardware_errors,
-              stats.work_utility,
-              uptime_display
+              device_count
         );
 
         if config.per_device_stats {
             for device in devices.values() {
-                let device_current = Self::format_hashrate(device.stats.current_hashrate, &config.hashrate_unit);
+                let device_5s = Self::format_hashrate(device.stats.avg_5s, &config.hashrate_unit);
                 let device_1m = Self::format_hashrate(device.stats.avg_1m, &config.hashrate_unit);
                 let device_5m = Self::format_hashrate(device.stats.avg_5m, &config.hashrate_unit);
                 info!("{} {}: {} (1m):{} (5m):{} | A:{} R:{} HW:{} | {:.1}°C",
                       device.device_name,
                       device.device_id,
-                      device_current,
+                      device_5s,
                       device_1m,
                       device_5m,
                       device.stats.accepted_shares,
