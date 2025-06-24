@@ -110,8 +110,33 @@ impl StratumClient {
         info!("Connecting to Stratum pool: {}", self.url);
         debug!("🔗 [Pool {}] 开始连接到矿池: {}", self.pool_id, self.url);
 
-        // 创建代理连接器
-        let connector = ProxyConnector::new(self.proxy_config.clone());
+        // 创建代理连接器（支持TLS配置）
+        let connector = if let Some(ref proxy_config) = self.proxy_config {
+            // 检查是否是SOCKS5+TLS代理，如果是则设置TLS配置
+            if proxy_config.proxy_type == "socks5+tls" {
+                // 直接使用代理配置中的TLS设置，不硬编码任何服务器
+                let tls_config = crate::pool::proxy::TlsConfig {
+                    skip_verify: proxy_config.skip_verify.unwrap_or(false),
+                    server_name: proxy_config.server_name.clone(),
+                    ca_cert_path: proxy_config.ca_cert.clone(),
+                    client_cert_path: proxy_config.client_cert.clone(),
+                    client_key_path: proxy_config.client_key.clone(),
+                };
+
+                debug!("🔐 [Pool {}] 使用TLS代理配置: skip_verify={:?}, server_name={:?}",
+                       self.pool_id, tls_config.skip_verify, tls_config.server_name);
+
+                if tls_config.skip_verify {
+                    warn!("⚠️ [Pool {}] TLS证书验证已禁用 (skip_verify=true)", self.pool_id);
+                }
+
+                ProxyConnector::new_with_tls(Some(proxy_config.clone()), tls_config)
+            } else {
+                ProxyConnector::new(self.proxy_config.clone())
+            }
+        } else {
+            ProxyConnector::new(self.proxy_config.clone())
+        };
 
         // 建立连接（可能通过代理）
         debug!("🔗 [Pool {}] 尝试建立连接，超时时间: 10秒", self.pool_id);
@@ -548,8 +573,34 @@ impl StratumClient {
         Ok(work)
     }
 
-    /// 发送ping
+    /// 检查是否已连接
+    pub async fn is_connected(&self) -> bool {
+        *self.connected.read().await
+    }
+
+    /// 发送心跳检测
     pub async fn ping(&self) -> Result<(), PoolError> {
+        // 首先检查连接状态
+        if !*self.connected.read().await {
+            return Err(PoolError::ConnectionFailed {
+                url: self.url.clone(),
+                error: "StratumClient not connected".to_string(),
+            });
+        }
+
+        // 检查writer是否可用
+        {
+            let writer_guard = self.writer.lock().await;
+            if writer_guard.is_none() {
+                // 连接状态和writer不一致，更新连接状态
+                *self.connected.write().await = false;
+                return Err(PoolError::ConnectionFailed {
+                    url: self.url.clone(),
+                    error: "TCP writer not available".to_string(),
+                });
+            }
+        }
+
         let message = StratumMessage {
             id: Some(self.next_message_id().await),
             method: Some("mining.ping".to_string()),
@@ -558,8 +609,26 @@ impl StratumClient {
             error: None,
         };
 
-        let _response = self.send_request(message).await?;
-        Ok(())
+        match self.send_request(message).await {
+            Ok(_response) => {
+                debug!("💗 [Pool {}] 心跳响应成功", self.pool_id);
+                Ok(())
+            }
+            Err(e) => {
+                // 心跳失败时，检查是否是连接问题
+                match &e {
+                    PoolError::ConnectionFailed { .. } | PoolError::Timeout { .. } => {
+                        // 连接问题，更新连接状态
+                        warn!("💔 [Pool {}] 心跳失败，连接可能断开: {}", self.pool_id, e);
+                        *self.connected.write().await = false;
+                    }
+                    _ => {
+                        debug!("💔 [Pool {}] 心跳失败: {}", self.pool_id, e);
+                    }
+                }
+                Err(e)
+            }
+        }
     }
 
     /// 发送请求并等待响应
@@ -757,6 +826,10 @@ impl StratumClient {
                     }
                 }
 
+                warn!("📥 [Pool {}] 消息处理循环结束，更新连接状态", pool_id);
+                *connected.write().await = false;
+            } else {
+                warn!("📥 [Pool {}] 无法获取读取流，连接可能未建立", pool_id);
                 *connected.write().await = false;
             }
         });

@@ -569,27 +569,75 @@ impl PoolManager {
             while *running.read().await {
                 interval.tick().await;
 
-                // 只对启用的矿池发送心跳
+                // 只对已连接的矿池发送心跳
                 let pools_guard = pools.read().await;
                 let clients = stratum_clients.read().await;
 
                 for (pool_id, client) in clients.iter() {
-                    // 检查矿池是否启用
-                    if let Some(pool) = pools_guard.get(pool_id) {
+                    // 检查矿池是否启用且已连接
+                    let pool_enabled = if let Some(pool) = pools_guard.get(pool_id) {
                         let pool_guard = pool.lock().await;
+
+                        // 跳过未启用的矿池
                         if !pool_guard.enabled {
-                            debug!("Skipping heartbeat for disabled pool {}", pool_id);
+                            debug!("跳过心跳检查: 矿池 {} 未启用", pool_id);
                             continue;
                         }
-                        drop(pool_guard); // 释放锁
+
+                        // 跳过未连接的矿池（故障转移模式下的备用池）
+                        if !pool_guard.is_connected() {
+                            debug!("跳过心跳检查: 矿池 {} 未连接 (备用池)", pool_id);
+                            continue;
+                        }
+
+                        true
+                    } else {
+                        false
+                    };
+
+                    if !pool_enabled {
+                        continue;
                     }
 
+                    // 检查StratumClient的实际连接状态并发送心跳
                     if let Ok(client) = client.try_lock() {
-                        if let Err(e) = client.ping().await {
-                            warn!("Heartbeat failed for pool {}: {}", pool_id, e);
-                        } else {
-                            debug!("Heartbeat sent successfully to pool {}", pool_id);
+                        // 检查StratumClient的实际连接状态
+                        let stratum_connected = client.is_connected().await;
+                        if !stratum_connected {
+                            debug!("跳过心跳检查: 矿池 {} StratumClient未连接", pool_id);
+
+                            // 更新Pool状态为断开连接
+                            if let Some(pool) = pools_guard.get(pool_id) {
+                                let mut pool_guard = pool.lock().await;
+                                if pool_guard.is_connected() {
+                                    warn!("检测到矿池 {} StratumClient连接断开，更新Pool状态", pool_id);
+                                    pool_guard.status = crate::pool::PoolStatus::Disconnected;
+                                    pool_guard.connected_at = None;
+                                }
+                            }
+                            continue;
                         }
+
+                        match client.ping().await {
+                            Ok(_) => {
+                                debug!("✅ 心跳成功: 矿池 {}", pool_id);
+                            },
+                            Err(e) => {
+                                warn!("💔 心跳失败: 矿池 {} - {}", pool_id, e);
+
+                                // 心跳失败时，更新Pool状态
+                                if let Some(pool) = pools_guard.get(pool_id) {
+                                    let mut pool_guard = pool.lock().await;
+                                    pool_guard.status = crate::pool::PoolStatus::Error(format!("心跳失败: {}", e));
+                                    pool_guard.connected_at = None;
+                                }
+
+                                // 在故障转移模式下，心跳失败可能需要触发池切换
+                                // TODO: 添加池切换逻辑
+                            }
+                        }
+                    } else {
+                        debug!("⏭️  跳过心跳: 矿池 {} 客户端被锁定", pool_id);
                     }
                 }
             }

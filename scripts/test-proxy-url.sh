@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 测试代理URL解析功能
-# 验证 socks5+tls://test22:cc112233d@54.248.128.73:8080 这种格式的解析
+# 验证 socks5+tls://user:pwd@127.0.0.1:8080 这种格式的解析
 
 set -e
 
@@ -36,13 +36,13 @@ check_binary() {
         echo "  cargo build --release"
         exit 1
     fi
-    
+
     if [ -f "./target/release/cgminer-rs" ]; then
         CGMINER_BIN="./target/release/cgminer-rs"
     else
         CGMINER_BIN="./target/debug/cgminer-rs"
     fi
-    
+
     log_info "Using binary: $CGMINER_BIN"
 }
 
@@ -121,33 +121,33 @@ EOF
 
 # 测试您提到的代理URL格式
 test_your_proxy_format() {
-    log_info "Testing your proxy URL format: socks5+tls://test22:cc112233d@54.248.128.73:8080"
-    
+    log_info "Testing your proxy URL format: socks5+tls://user:pwd@127.0.0.1:8080"
+
     TEMP_CONFIG=$(create_temp_config)
-    
+
     log_info "Running cgminer-rs with your proxy format..."
     OUTPUT=$(timeout 5s $CGMINER_BIN \
         --config "$TEMP_CONFIG" \
-        --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+        --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
         --pool stratum+tcp://btc.f2pool.com:1314 \
         --user kayuii.bbt \
         --pass x 2>&1 | head -30 || true)
-    
+
     echo "$OUTPUT"
-    
+
     # 检查是否正确解析了代理信息
     if echo "$OUTPUT" | grep -q "CLI arguments applied"; then
         log_success "✅ CLI arguments were applied successfully"
     else
         log_warning "⚠️ CLI arguments application message not found"
     fi
-    
-    if echo "$OUTPUT" | grep -q "socks5+tls://test22:cc112233d@54.248.128.73:8080"; then
+
+    if echo "$OUTPUT" | grep -q "socks5+tls://user:pwd@127.0.0.1:8080"; then
         log_success "✅ Proxy URL was correctly parsed and displayed"
     else
         log_warning "⚠️ Proxy URL display not found in output"
     fi
-    
+
     # 清理临时文件
     rm -f "$TEMP_CONFIG"
 }
@@ -155,9 +155,9 @@ test_your_proxy_format() {
 # 测试其他代理URL格式
 test_other_formats() {
     log_info "Testing other proxy URL formats..."
-    
+
     TEMP_CONFIG=$(create_temp_config)
-    
+
     # 测试基本SOCKS5
     log_info "Testing basic SOCKS5 with credentials in URL..."
     timeout 3s $CGMINER_BIN \
@@ -166,9 +166,9 @@ test_other_formats() {
         --pool stratum+tcp://test.pool.com:4444 \
         --user testuser \
         --pass testpass 2>&1 | head -10 || true
-    
+
     echo ""
-    
+
     # 测试无认证SOCKS5
     log_info "Testing SOCKS5 without authentication..."
     timeout 3s $CGMINER_BIN \
@@ -177,7 +177,7 @@ test_other_formats() {
         --pool stratum+tcp://test.pool.com:4444 \
         --user testuser \
         --pass testpass 2>&1 | head -10 || true
-    
+
     # 清理临时文件
     rm -f "$TEMP_CONFIG"
 }
@@ -185,9 +185,9 @@ test_other_formats() {
 # 测试错误处理
 test_error_handling() {
     log_info "Testing error handling for invalid proxy URLs..."
-    
+
     TEMP_CONFIG=$(create_temp_config)
-    
+
     # 测试不支持的协议
     log_info "Testing unsupported protocol..."
     if $CGMINER_BIN \
@@ -197,7 +197,7 @@ test_error_handling() {
     else
         log_error "❌ Failed to reject unsupported protocol"
     fi
-    
+
     # 测试缺少端口
     log_info "Testing missing port..."
     if $CGMINER_BIN \
@@ -207,7 +207,7 @@ test_error_handling() {
     else
         log_error "❌ Failed to reject URL without port"
     fi
-    
+
     # 清理临时文件
     rm -f "$TEMP_CONFIG"
 }
@@ -216,22 +216,22 @@ test_error_handling() {
 main() {
     log_info "Testing proxy URL parsing with your format..."
     echo "=================================================="
-    
+
     check_binary
     echo
-    
+
     test_your_proxy_format
     echo
-    
+
     test_other_formats
     echo
-    
+
     test_error_handling
     echo
-    
+
     log_success "All proxy URL tests completed!"
     echo
-    log_info "Your format 'socks5+tls://test22:cc112233d@54.248.128.73:8080' is fully supported!"
+    log_info "Your format 'socks5+tls://user:pwd@127.0.0.1:8080' is fully supported!"
     log_info "This is indeed the most convenient way to specify proxy with authentication."
 }
 

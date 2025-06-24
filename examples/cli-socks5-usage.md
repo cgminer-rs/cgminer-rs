@@ -9,7 +9,7 @@
 ```bash
 # 一行命令搞定SOCKS5+TLS代理连接
 ./cgminer-rs \
-  --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+  --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
   --pool stratum+tcp://btc.f2pool.com:1314 \
   --user kayuii.bbt \
   --pass x
@@ -89,7 +89,7 @@
 
 # 实际使用示例
 ./cgminer-rs \
-  --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+  --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
   --pool stratum+tcp://btc.f2pool.com:1314 \
   --user kayuii.bbt \
   --pass x

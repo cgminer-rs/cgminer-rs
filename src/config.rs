@@ -211,6 +211,16 @@ pub struct ProxyConfig {
     pub username: Option<String>,
     /// 代理认证密码（可选）
     pub password: Option<String>,
+    /// TLS配置：是否跳过证书验证
+    pub skip_verify: Option<bool>,
+    /// TLS配置：服务器名称
+    pub server_name: Option<String>,
+    /// TLS配置：CA证书路径
+    pub ca_cert: Option<String>,
+    /// TLS配置：客户端证书路径
+    pub client_cert: Option<String>,
+    /// TLS配置：客户端私钥路径
+    pub client_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -611,12 +621,49 @@ impl Config {
         let password = args.proxy_pass.clone()
             .or_else(|| parsed_url.password().map(|p| p.to_string()));
 
+        // 解析URL查询参数中的TLS配置
+        let mut skip_verify = None;
+        let mut server_name = None;
+        let mut ca_cert = None;
+        let mut client_cert = None;
+        let mut client_key = None;
+
+        for (key, value) in parsed_url.query_pairs() {
+            match key.as_ref() {
+                "skip_verify" => {
+                    skip_verify = Some(value.parse::<bool>()
+                        .with_context(|| format!("Invalid skip_verify value: {}", value))?);
+                },
+                "server_name" => {
+                    server_name = Some(value.to_string());
+                },
+                "ca_cert" => {
+                    ca_cert = Some(value.to_string());
+                },
+                "client_cert" => {
+                    client_cert = Some(value.to_string());
+                },
+                "client_key" => {
+                    client_key = Some(value.to_string());
+                },
+                _ => {
+                    // 忽略未知参数，但记录警告
+                    eprintln!("Warning: Unknown proxy URL parameter: {}", key);
+                }
+            }
+        }
+
         Ok(ProxyConfig {
             proxy_type,
             host,
             port,
             username,
             password,
+            skip_verify,
+            server_name,
+            ca_cert,
+            client_cert,
+            client_key,
         })
     }
 

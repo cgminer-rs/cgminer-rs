@@ -9,7 +9,7 @@ CGMiner-RS 现在完全支持通过SOCKS5代理连接到矿池，提供了最简
 ```bash
 # 您的示例格式 - 完美支持！
 ./cgminer-rs \
-  --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+  --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
   --pool stratum+tcp://btc.f2pool.com:1314 \
   --user kayuii.bbt \
   --pass x
@@ -38,7 +38,7 @@ CGMiner-RS 现在完全支持通过SOCKS5代理连接到矿池，提供了最简
 ```bash
 # 直接使用您提供的代理格式
 ./cgminer-rs \
-  --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+  --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
   --pool stratum+tcp://btc.f2pool.com:1314 \
   --user kayuii.bbt \
   --pass x
@@ -93,7 +93,7 @@ CGMiner-RS 现在完全支持通过SOCKS5代理连接到矿池，提供了最简
 ### 查看详细日志
 ```bash
 ./cgminer-rs \
-  --proxy socks5+tls://test22:cc112233d@54.248.128.73:8080 \
+  --proxy socks5+tls://user:pwd@127.0.0.1:8080 \
   --pool stratum+tcp://btc.f2pool.com:1314 \
   --user kayuii.bbt \
   --pass x \
@@ -103,12 +103,12 @@ CGMiner-RS 现在完全支持通过SOCKS5代理连接到矿池，提供了最简
 ### 成功连接的日志示例
 ```
 🔧 CLI arguments applied to configuration
-   🌐 Proxy: socks5+tls://test22:cc112233d@54.248.128.73:8080
+   🌐 Proxy: socks5+tls://user:pwd@127.0.0.1:8080
    🏊 Pool: stratum+tcp://btc.f2pool.com:1314
    👤 User: kayuii.bbt
 
-🔗 [Pool 0] 通过SOCKS5+TLS代理连接: 54.248.128.73:8080 -> btc.f2pool.com:1314
-✅ SOCKS5+TLS代理连接建立成功: 54.248.128.73:8080 -> btc.f2pool.com:1314
+🔗 [Pool 0] 通过SOCKS5+TLS代理连接: 127.0.0.1:8080 -> btc.f2pool.com:1314
+✅ SOCKS5+TLS代理连接建立成功: 127.0.0.1:8080 -> btc.f2pool.com:1314
 ```
 
 ## 📚 更多信息
@@ -119,4 +119,4 @@ CGMiner-RS 现在完全支持通过SOCKS5代理连接到矿池，提供了最简
 
 ---
 
-**您的格式 `socks5+tls://test22:cc112233d@54.248.128.73:8080` 是完全支持的，这确实是最方便的使用方式！** 🎉
+**您的格式 `socks5+tls://user:pwd@127.0.0.1:8080` 是完全支持的，这确实是最方便的使用方式！** 🎉

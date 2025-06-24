@@ -1,0 +1,97 @@
+# CGMiner-RS SOCKS5+TLS 代理配置示例
+# 这个配置文件展示了如何使用改进的SOCKS5+TLS代理支持
+
+[general]
+log_level = "debug"
+log_file = "./logs/cgminer.log"
+pid_file = "./cgminer-rs.pid"
+
+# 工作重启超时时间 (毫秒)
+work_restart_timeout = 10000
+# 扫描时间 (秒)
+scan_time = 5
+# 结果收集间隔 (毫秒)
+result_collection_interval_ms = 500
+
+[cores]
+# 启用CPU挖矿核心用于测试
+cpu_mining = { enabled = true, threads = 2 }
+
+[pools]
+# 矿池策略
+strategy = "failover"
+
+# 矿池配置 - 标准SOCKS5+TLS代理（推荐）
+[[pools.pools]]
+name = "f2pool-socks5-tls"
+url = "stratum+tcp://btc.f2pool.com:1314"
+username = "kayuii.bbt"
+password = "x"
+priority = 1
+enabled = true
+
+# SOCKS5+TLS代理配置（gost风格的改进实现）
+[pools.pools.proxy]
+proxy_type = "socks5+tls"
+host = "127.0.0.1"
+port = 8080
+username = "x"
+password = "x"
+
+# 矿池配置 - 带TLS参数的SOCKS5+TLS代理
+[[pools.pools]]
+name = "btccom-socks5-tls-secure"
+url = "stratum+tcp://stratum.btc.com:1800"
+username = "kayuii.bbt"
+password = "x"
+priority = 2
+enabled = false
+
+# SOCKS5+TLS代理配置 - 禁用证书验证（不推荐，仅用于测试）
+[pools.pools.proxy]
+proxy_type = "socks5+tls"
+host = "proxy.example.com"
+port = 1080
+username = "proxy_user"
+password = "proxy_pass"
+# 支持的TLS参数：
+# skip_verify = true      # 跳过证书验证（不安全）
+# server_name = "proxy.example.com"  # 自定义SNI
+# ca_cert = "./certs/ca.pem"        # 自定义CA证书
+# client_cert = "./certs/client.pem" # 客户端证书
+# client_key = "./certs/client.key"  # 客户端私钥
+
+# 矿池配置 - 标准SOCKS5代理（无TLS）
+[[pools.pools]]
+name = "binance-socks5"
+url = "stratum+tcp://stratum-btc.binancezh.io:8888"
+username = "kayuii.bbt"
+password = "x"
+priority = 3
+enabled = false
+
+[pools.pools.proxy]
+proxy_type = "socks5"
+host = "127.0.0.1"
+port = 1080
+# 无认证的本地代理（如shadowsocks）
+
+# 矿池配置 - 直接连接（无代理）
+[[pools.pools]]
+name = "direct-connection"
+url = "stratum+tcp://us-east1.btc.slushpool.com:4444"
+username = "kayuii.bbt"
+password = "x"
+priority = 4
+enabled = false
+# 没有 [pools.pools.proxy] 配置表示直接连接
+
+[web]
+enabled = true
+host = "127.0.0.1"
+port = 4040
+
+[monitoring]
+prometheus_enabled = false
+prometheus_host = "127.0.0.1"
+prometheus_port = 9464
