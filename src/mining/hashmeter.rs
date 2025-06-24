@@ -256,9 +256,9 @@ impl Hashmeter {
         let avg_5m = Self::format_hashrate(stats.avg_5m, &config.hashrate_unit);
         let avg_15m = Self::format_hashrate(stats.avg_15m, &config.hashrate_unit);
 
-        // 设备数量显示：优先使用设备统计数据，否则使用配置的设备数量
+        // 使用实际的设备数量，而不是硬编码
         let device_count = if devices.is_empty() {
-            4 // CPU BTC 核心配置的设备数量
+            0 // 如果没有设备统计，显示0
         } else {
             devices.len()
         };

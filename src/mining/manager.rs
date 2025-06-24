@@ -981,7 +981,7 @@ impl MiningManager {
     async fn start_hashmeter_updates(&self) -> Result<(), MiningError> {
         let hashmeter = self.hashmeter.clone();
         let stats = self.stats.clone();
-        let _device_manager = self.device_manager.clone();
+        let device_manager = self.device_manager.clone();
         let _monitoring_system = self.monitoring_system.clone();
         let running = self.running.clone();
 
@@ -997,11 +997,11 @@ impl MiningManager {
                     // 获取挖矿统计数据
                     let stats_guard = stats.read().await;
 
-                                        // 获取活跃设备数量
-                    let active_devices = if let Ok(device_mgr) = _device_manager.try_lock() {
+                    // 获取活跃设备数量（从设备管理器获取真实数量）
+                    let active_devices = if let Ok(device_mgr) = device_manager.try_lock() {
                         device_mgr.get_active_device_count().await
                     } else {
-                        4 // 从日志可以看到实际创建了4个设备
+                        0 // 如果设备管理器被锁定，显示0
                     };
 
                     // 获取连接的矿池数量
@@ -1028,10 +1028,22 @@ impl MiningManager {
                         warn!("Failed to update hashmeter total stats: {}", e);
                     }
 
-                    // 更新设备级统计数据
-                    // 由于当前核心注册表API限制，暂时使用固定的设备数量
-                    // 在实际实现中，应该从核心注册表获取真实的设备统计数据
-                    // TODO: 当核心注册表支持设备统计查询时，实现真实的设备统计更新
+                    // 更新设备级统计数据 - 从设备管理器获取真实的设备统计
+                    if let Ok(device_mgr) = device_manager.try_lock() {
+                        // 获取所有设备信息
+                        let device_infos = device_mgr.get_all_device_info().await;
+
+                        // 为每个设备更新统计信息
+                        for device_info in device_infos {
+                            // 尝试获取设备的核心统计信息
+                            if let Ok(device_stats_core) = device_mgr.get_device_stats_core(device_info.id).await {
+                                // 更新设备统计到算力计量器
+                                if let Err(e) = hashmeter.update_device_stats(&device_stats_core).await {
+                                    debug!("Failed to update device {} stats: {}", device_info.id, e);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         });
