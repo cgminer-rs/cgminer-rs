@@ -27,15 +27,19 @@ result_collection_interval_ms = 20
 [cores]
 # 注意：启用的核心现在完全由编译特性决定 (cargo build --features="cpu-btc,gpu-btc")
 # default_core和enabled_cores都由系统的核心优先级逻辑自动选择 (ASIC > GPU > CPU)
+#
+# **重要**：混合编译时(cpu-btc,gpu-btc)，系统会自动选择GPU核心并移除CPU核心
+# 单独GPU编译：--features=gpu-btc
+# 混合编译：--features=cpu-btc,gpu-btc (自动选择GPU)
 
 # CPU-BTC 核心配置 - 使用 cgminer-cpu-btc-core
 [cores.cpu_btc]
 enabled = true
-device_count = 16             # 设备数量: 4个虚拟设备
-min_hashrate = 30000000.0    # 最小算力: 30 MH/s (实际cgminer-cpu-btc-core算力)
-max_hashrate = 40000000.0    # 最大算力: 40 MH/s (实际cgminer-cpu-btc-core算力)
+device_count = 8             # 设备数量: 8个虚拟设备 (混合编译时会被忽略)
+min_hashrate = 25000000.0    # 最小算力: 25 MH/s (适合您的实际情况)
+max_hashrate = 35000000.0    # 最大算力: 35 MH/s (您的设备最大算力)
 error_rate = 0.002           # 错误率: 0.2%
-batch_size = 12000           # 批处理大小: 12000
+batch_size = 100000          # 批处理大小: 100000 (大批次保证算力稳定)
 work_timeout_ms = 1500       # 工作超时: 1.5秒
 
 # CPU绑定配置 - Mac M4 优化
@@ -48,11 +52,11 @@ prefer_performance_cores = true  # 优先使用性能核心
 [cores.gpu_btc]
 enabled = true               # 启用GPU核心以配合--features=gpu-btc
 device_count = 1             # GPU设备数量: 通常Mac只有1个GPU
-max_hashrate = 40000000.0    # 最大算力: 40 MH/s
-work_size = 65536            # 工作组大小: Mac M4 GPU优化值
+max_hashrate = 50000000.0    # 最大算力: 50 MH/s (提高目标算力)
+work_size = 524288           # 工作组大小: 512K (大批次提高GPU利用率)
 backend = "metal"            # GPU后端: metal (Mac), opencl, cuda
 threads_per_threadgroup = 1024  # Metal线程组大小
-work_timeout_ms = 2000       # 工作超时: 2秒
+work_timeout_ms = 5000       # 工作超时: 5秒 (给大批次更多时间)
 
 # ASIC核心配置 (默认禁用)
 [cores.asic_core]
@@ -159,7 +163,7 @@ max_cpu_usage = 80.0
 max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
-min_hashrate = 50.0
+min_hashrate = 0.025  # 25 MH/s (适合您的35MH/s设备)
 
 # =============================================================================
 # 算力计量器配置

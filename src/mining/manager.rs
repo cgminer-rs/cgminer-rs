@@ -899,6 +899,58 @@ impl MiningManager {
 
                 info!("Selected optimal core: {} (priority: asic > gpu > cpu)", selected_core);
 
+                // **关键修复**：移除未选中的核心，避免工作分发到错误的核心
+                info!("🧹 开始卸载未选中的核心，确保资源完全释放");
+
+                let mut removed_cores = Vec::new();
+                for core_id in &created_cores {
+                    if core_id != &selected_core {
+                        info!("🗑️  正在卸载未选中的核心: {}", core_id);
+
+                        // 1. 先停止核心（如果已启动）
+                        if let Err(e) = self.core_registry.stop_core(core_id).await {
+                            debug!("核心 {} 停止失败（可能未启动）: {}", core_id, e);
+                        }
+
+                        // 2. 从注册表中完全移除核心
+                        match self.core_registry.remove_core(core_id).await {
+                            Ok(()) => {
+                                info!("✅ 成功卸载核心: {}", core_id);
+                                removed_cores.push(core_id.clone());
+                            }
+                            Err(e) => {
+                                warn!("❌ 核心 {} 卸载失败: {}", core_id, e);
+                            }
+                        }
+                    }
+                }
+
+                // 3. 清理设备管理器中的相关映射
+                if !removed_cores.is_empty() {
+                    info!("🧹 正在清理设备管理器中的核心映射...");
+
+                    // 清理设备-核心映射
+                    for removed_core in &removed_cores {
+                        if let Err(e) = self.device_core_mapper.cleanup_core_mappings(removed_core).await {
+                            warn!("清理核心 {} 的设备映射失败: {}", removed_core, e);
+                        }
+                    }
+
+                    // 清理设备管理器中的设备实例
+                    if let Ok(mut device_manager) = self.device_manager.try_lock() {
+                        for removed_core in &removed_cores {
+                            debug!("清理设备管理器中核心 {} 的设备实例", removed_core);
+                            // 通知设备管理器已卸载的核心，让它清理相关设备
+                            // TODO: 如果需要，可以在这里添加设备管理器的清理方法
+                        }
+                    } else {
+                        debug!("设备管理器正忙，跳过清理（可能在后续操作中自动清理）");
+                    }
+                }
+
+                info!("🎯 核心选择完成 - 已选择: {}, 已卸载: {} 个多余核心",
+                      selected_core, removed_cores.len());
+
                 match self.core_registry.start_core(&selected_core).await {
                     Ok(()) => {
                         info!("Started optimal mining core: {}", selected_core);
@@ -1215,8 +1267,22 @@ impl UnifiedWorkDispatcher {
             return Err("No active cores available".to_string());
         }
 
-        // 使用轮询策略分发到核心
-        for core_id in &active_core_ids {
+        // **优化**：按优先级排序核心，优先向GPU核心分发工作
+        let mut sorted_cores = active_core_ids.clone();
+        sorted_cores.sort_by_key(|core_id| {
+            if core_id.contains("gpu") {
+                1 // GPU最高优先级
+            } else if core_id.contains("asic") || core_id.contains("maijie") {
+                2 // ASIC中等优先级
+            } else if core_id.contains("cpu") || core_id.contains("software") {
+                3 // CPU最低优先级
+            } else {
+                4 // 未知类型
+            }
+        });
+
+        // 使用优先级排序后的核心进行分发
+        for core_id in &sorted_cores {
             debug!("Trying to submit work to core: {}", core_id);
             match self.core_registry.submit_work_to_core(core_id, work_item.work.clone().into()).await {
                 Ok(()) => {

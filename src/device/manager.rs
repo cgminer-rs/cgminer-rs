@@ -158,29 +158,50 @@ impl DeviceManager {
     async fn create_devices(&mut self) -> Result<(), DeviceError> {
         debug!("🔧 创建设备");
 
-        // 直接从core_registry获取可用核心工厂
-        let available_cores = self.core_registry.list_factories().await.map_err(|e| {
-            DeviceError::InitializationFailed {
-                device_id: 0,
-                reason: format!("获取可用核心失败: {}", e),
-            }
-        })?;
-
-        if available_cores.is_empty() {
-            warn!("⚠️ 没有可用的挖矿核心");
+        // **修复**：只为活跃的核心创建设备，而不是所有注册的工厂
+        if self.active_core_ids.is_empty() {
+            warn!("⚠️ 没有活跃的挖矿核心");
             return Ok(());
         }
 
-        debug!("📋 可用挖矿核心: {:?}", available_cores.iter().map(|c| &c.name).collect::<Vec<_>>());
+        info!("🏭 活跃核心列表: {:?}", self.active_core_ids);
 
-        // 为每个核心扫描并创建设备
-        for core in available_cores {
+        // 获取所有注册的核心工厂信息
+        let all_factories = self.core_registry.list_factories().await.map_err(|e| {
+            DeviceError::InitializationFailed {
+                device_id: 0,
+                reason: format!("获取核心工厂失败: {}", e),
+            }
+        })?;
+
+        // **关键修复**：只为活跃核心对应的工厂创建设备
+        let mut active_factories = Vec::new();
+        for factory in all_factories {
+            // 检查这个工厂是否有对应的活跃核心实例
+            let factory_name = factory.name.clone(); // 先克隆名称避免借用问题
+            if let Ok(_active_core_id) = self.find_active_core_for_factory(&factory_name).await {
+                debug!("✅ 工厂 {} 有活跃核心实例，将创建设备", factory_name);
+                active_factories.push(factory);
+            } else {
+                debug!("⚠️ 工厂 {} 没有活跃核心实例，跳过设备创建", factory_name);
+            }
+        }
+
+        if active_factories.is_empty() {
+            warn!("⚠️ 没有活跃核心对应的工厂");
+            return Ok(());
+        }
+
+        debug!("📋 活跃核心工厂: {:?}", active_factories.iter().map(|c| &c.name).collect::<Vec<_>>());
+
+        // 为每个活跃核心的工厂扫描并创建设备
+        for core in active_factories {
             match self.create_devices_for_core(&core).await {
                 Ok(device_count) => {
-                    debug!("✅ 核心 {} 创建了 {} 个设备", core.name, device_count);
+                    info!("✅ 核心工厂 {} 创建了 {} 个设备", core.name, device_count);
                 }
                 Err(e) => {
-                    error!("❌ 核心 {} 设备创建失败: {}", core.name, e);
+                    error!("❌ 核心工厂 {} 设备创建失败: {}", core.name, e);
                 }
             }
         }

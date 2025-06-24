@@ -940,6 +940,60 @@ impl StratumClient {
         *self.difficulty.read().await
     }
 
+    /// 诊断连接和工作状态
+    pub async fn diagnose_work_status(&self) -> String {
+        let mut status = Vec::new();
+
+        // 检查连接状态
+        let connected = *self.connected.read().await;
+        status.push(format!("💡 矿池连接状态: {}", if connected { "✅ 已连接" } else { "❌ 未连接" }));
+
+        // 检查当前工作
+        let has_job = self.current_job.read().await.is_some();
+        status.push(format!("💼 当前工作状态: {}", if has_job { "✅ 有可用工作" } else { "❌ 无可用工作" }));
+
+        // 检查extranonce状态
+        let (extranonce1, extranonce2_size) = self.get_extranonce_info().await;
+        status.push(format!("🔢 Extranonce1: {}",
+            if extranonce1.is_some() { "✅ 已设置" } else { "❌ 未设置" }));
+        status.push(format!("🔢 Extranonce2 大小: {}",
+            if extranonce2_size > 0 { format!("✅ {} 字节", extranonce2_size) } else { "❌ 未设置".to_string() }));
+
+        // 检查难度
+        let difficulty = *self.difficulty.read().await;
+        status.push(format!("🎯 当前难度: {}", if difficulty > 0.0 { format!("✅ {}", difficulty) } else { "❌ 未设置".to_string() }));
+
+        // 检查writer和reader状态
+        let writer_available = {
+            let writer_guard = self.writer.lock().await;
+            writer_guard.is_some()
+        };
+        let reader_available = {
+            let reader_guard = self.reader.lock().await;
+            reader_guard.is_some()
+        };
+
+        status.push(format!("📤 TCP写入流: {}", if writer_available { "✅ 可用" } else { "❌ 不可用" }));
+        status.push(format!("📥 TCP读取流: {}", if reader_available { "✅ 可用" } else { "❌ 不可用" }));
+
+        // 诊断建议
+        status.push("\n🔍 诊断建议:".to_string());
+
+        if !connected {
+            status.push("   • 请检查网络连接和矿池URL".to_string());
+            status.push("   • 请检查代理设置（如果有）".to_string());
+        } else if !has_job {
+            status.push("   • 矿池已连接但未发送工作，可能原因：".to_string());
+            status.push("     - 认证失败，请检查用户名/密码".to_string());
+            status.push("     - 矿池正在初始化，请等待".to_string());
+            status.push("     - 网络延迟，检查网络质量".to_string());
+        } else if extranonce1.is_none() {
+            status.push("   • 订阅失败，请检查矿池协议兼容性".to_string());
+        }
+
+        status.join("\n")
+    }
+
     /// 验证难度值是否有效
     pub fn is_valid_difficulty(difficulty: f64) -> bool {
         difficulty > 0.0 && difficulty.is_finite() && difficulty <= 1e12

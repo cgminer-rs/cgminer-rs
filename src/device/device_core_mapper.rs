@@ -193,6 +193,33 @@ impl DeviceCoreMapper {
         }
     }
 
+    /// 完全清理指定核心的所有设备映射和资源
+    pub async fn cleanup_core_mappings(&self, core_name: &str) -> Result<usize, DeviceError> {
+        let mut device_to_core = self.device_to_core.write().await;
+        let mut core_to_devices = self.core_to_devices.write().await;
+        let mut allocator = self.device_id_allocator.write().await;
+
+        let mut removed_count = 0;
+
+        // 获取该核心的所有设备ID
+        if let Some(device_ids) = core_to_devices.remove(core_name) {
+            for device_id in &device_ids {
+                // 从设备映射中移除
+                if device_to_core.remove(device_id).is_some() {
+                    // 释放设备ID
+                    allocator.deallocate_id(*device_id);
+                    removed_count += 1;
+                }
+            }
+        }
+
+        if removed_count > 0 {
+            info!("🧹 完全清理核心 {} 的设备映射: 释放了 {} 个设备", core_name, removed_count);
+        }
+
+        Ok(removed_count)
+    }
+
     /// 获取所有映射
     pub async fn get_all_mappings(&self) -> HashMap<u32, DeviceCoreMapping> {
         let device_to_core = self.device_to_core.read().await;
