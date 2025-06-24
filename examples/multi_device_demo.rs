@@ -8,6 +8,7 @@ use cgminer_rs::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::sleep;
+use serde_json;
 
 // 模拟 cgminer 风格的时间戳
 fn cgminer_timestamp() -> String {
@@ -67,11 +68,17 @@ async fn main() -> Result<()> {
         // 4. 创建并启动挖矿核心
         cgminer_log!("Creating CPU mining core...");
 
+        let mut custom_params = std::collections::HashMap::new();
+        custom_params.insert(
+            "device_count".to_string(),
+            serde_json::Value::Number(16.into()),
+        );
+
         let core_config = cgminer_core::CoreConfig {
             name: "CPU0".to_string(),
             enabled: true,
             devices: vec![],
-            custom_params: std::collections::HashMap::new(),
+            custom_params,
         };
 
         match core_registry.create_core("cpu-btc", core_config).await {
