@@ -56,7 +56,10 @@ impl WebServer {
         // 解析绑定地址
         let addr = format!("{}:{}", config.bind_address, config.port)
             .parse::<std::net::SocketAddr>()
-            .map_err(|e| MiningError::configuration(format!("Invalid bind address: {}", e)))?;
+            .map_err(|e| MiningError::Config(crate::error::ConfigError::ValidationError {
+            field: "bind_address".to_string(),
+            reason: format!("Invalid bind address: {}", e),
+        }))?;
 
         // 启动服务器
         let server = warp::serve(routes)

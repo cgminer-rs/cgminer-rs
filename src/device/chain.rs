@@ -2,7 +2,7 @@ use crate::error::DeviceError;
 use crate::device::traits::{ChainController, ChainStatus, HardwareInterface};
 use async_trait::async_trait;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, Instant};
+use std::time::{Duration, SystemTime};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{sleep, timeout};
 use tracing::{info, warn, debug};
@@ -79,29 +79,7 @@ impl AsicChainController {
         }
     }
 
-    /// 等待响应
-    async fn wait_for_response(&self, timeout_ms: u64) -> Result<Vec<u8>, DeviceError> {
-        let start = Instant::now();
-        let timeout_duration = Duration::from_millis(timeout_ms);
 
-        while start.elapsed() < timeout_duration {
-            // 尝试读取响应
-            match self.hardware.spi_transfer(self.chain_id, &[]).await {
-                Ok(response) => {
-                    if !response.is_empty() {
-                        return Ok(response);
-                    }
-                }
-                Err(_) => {
-                    // 继续等待
-                }
-            }
-
-            sleep(Duration::from_millis(1)).await;
-        }
-
-        Err(DeviceError::Timeout { device_id: self.chain_id as u32 })
-    }
 
     /// 检测单个芯片
     async fn detect_chip(&self, chip_id: u8) -> Result<bool, DeviceError> {

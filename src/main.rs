@@ -16,7 +16,7 @@ mod core_loader;
 mod web;
 mod logging;
 mod performance;
-mod security;
+
 
 use config::{Config, Args};
 use mining::MiningManager;

@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 // 重新导出主要错误类型用于应用层
-pub use MiningError as Error;
+
 
 // 应用层Result类型别名
 pub type Result<T> = std::result::Result<T, MiningError>;
@@ -45,20 +45,7 @@ pub enum MiningError {
 impl MiningError {
     /// 创建配置错误
     pub fn configuration(msg: String) -> Self {
-        MiningError::Config(ConfigError::ValidationError {
-            field: "configuration".to_string(),
-            reason: msg,
-        })
-    }
-
-    /// 创建安全错误
-    pub fn security(msg: String) -> Self {
-        MiningError::Security(msg)
-    }
-
-    /// 创建验证错误
-    pub fn validation_error(msg: impl Into<String>) -> Self {
-        MiningError::configuration(format!("Validation error: {}", msg.into()))
+        MiningError::ConfigError(msg)
     }
 }
 

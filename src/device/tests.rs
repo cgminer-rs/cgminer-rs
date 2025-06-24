@@ -3,7 +3,7 @@ mod tests {
 
     use crate::device::{DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult, DeviceConfig};
     // VirtualDevice removed - using cgminer-cpu-btc-core instead
-    use crate::device::traits::{MiningDevice, DeviceDriver};
+    use crate::device::traits::MiningDevice;
     use std::time::{Duration, SystemTime};
     use uuid::Uuid;
     use tokio;

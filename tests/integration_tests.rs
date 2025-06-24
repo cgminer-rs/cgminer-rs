@@ -4,7 +4,7 @@ use cgminer_rs::device::{DeviceManager, DeviceInfo};
 use cgminer_rs::pool::PoolManager;
 use cgminer_rs::monitoring::MonitoringSystem;
 use cgminer_core::{DeviceConfig as CoreDeviceConfig, Work, MiningCore};
-use cgminer_s_btc_core::SoftwareMiningCore;
+use cgminer_cpu_btc_core::CpuBtcCore;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::time::{sleep, timeout};
@@ -334,11 +334,10 @@ fn create_test_config() -> Config {
         },
         hashmeter: cgminer_rs::mining::HashmeterConfig {
             enabled: true,
-            log_interval: 30,
+            log_interval: 5,
             per_device_stats: true,
             console_output: true,
-            beautiful_output: true,
-            hashrate_unit: "GH".to_string(),
+            hashrate_unit: "AUTO".to_string(),
         },
     }
 }

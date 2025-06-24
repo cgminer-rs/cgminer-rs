@@ -61,16 +61,16 @@ pub mod error;            // 错误处理
 pub mod device;           // 设备管理 (应用层抽象)
 pub mod core_loader;      // 核心加载器
 pub mod performance;      // 性能监控 (应用层)
-pub mod security;         // 安全管理
+
 pub mod utils;            // 工具函数
-pub mod validation;       // 数据验证
+
 
 // ==================== 应用层公共接口 ====================
 
 // 主要应用组件
 pub use config::{Config, Args};
 pub use mining::MiningManager;
-pub use error::{Error, Result};
+pub use error::MiningError;
 
 // 设备管理 (应用层抽象 - 不是具体设备实现)
 pub use device::{DeviceManager, DeviceInfo, DeviceStats};

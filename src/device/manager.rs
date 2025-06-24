@@ -776,9 +776,9 @@ impl DeviceManager {
         let device_info = self.device_info.read().await;
 
         let mut total_current = 0.0;
-        let mut total_1m = 0.0;
-        let mut total_5m = 0.0;
-        let mut total_15m = 0.0;
+        let total_1m = 0.0;  // 暂未实现时间窗口统计
+        let total_5m = 0.0;  // 暂未实现时间窗口统计
+        let total_15m = 0.0; // 暂未实现时间窗口统计
         let mut total_avg = 0.0;
         let mut active_devices = 0;
         let mut device_details = Vec::new();

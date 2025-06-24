@@ -19,8 +19,6 @@ pub struct HashmeterConfig {
     pub per_device_stats: bool,
     /// 是否启用控制台输出
     pub console_output: bool,
-    /// 是否启用美化输出
-    pub beautiful_output: bool,
     /// 算力单位 (自动适应，无需配置)
     #[serde(skip)]
     pub hashrate_unit: String,
@@ -33,7 +31,6 @@ impl Default for HashmeterConfig {
             log_interval: 5, // 5秒间隔，更频繁的统计
             per_device_stats: true,
             console_output: true,
-            beautiful_output: false, // 默认使用传统格式
             hashrate_unit: "AUTO".to_string(),
         }
     }
@@ -245,46 +242,7 @@ impl Hashmeter {
         let stats = total_stats.read().await;
         let devices = device_stats.read().await;
 
-        if config.beautiful_output {
-            Self::output_beautiful_format(&stats, &devices, config).await;
-        } else {
-            Self::output_traditional_format(&stats, &devices, config).await;
-        }
-    }
-
-    /// 美化格式输出 (CGMiner-RS风格，显示滑动窗口算力)
-    async fn output_beautiful_format(
-        stats: &HashrateStats,
-        devices: &HashMap<u32, DeviceHashrateStats>,
-        config: &HashmeterConfig,
-    ) {
-        let avg_5s = Self::format_hashrate(stats.avg_5s, &config.hashrate_unit);
-        let avg_1m = Self::format_hashrate(stats.avg_1m, &config.hashrate_unit);
-        let avg_5m = Self::format_hashrate(stats.avg_5m, &config.hashrate_unit);
-        let avg_15m = Self::format_hashrate(stats.avg_15m, &config.hashrate_unit);
-        let uptime_display = Self::format_uptime(stats.uptime);
-        let reject_rate = Self::calculate_reject_rate(stats.accepted_shares, stats.rejected_shares);
-
-        info!("⚡ Mining Status Update:");
-        info!("   📈 Hashrate: {} (5s)", avg_5s);
-        info!("   📊 Averages: {} (1m) | {} (5m) | {} (15m)", avg_1m, avg_5m, avg_15m);
-        info!("   🎯 Shares: {} accepted, {} rejected ({:.2}% reject rate)",
-              stats.accepted_shares, stats.rejected_shares, reject_rate);
-        info!("   ⚠️  Hardware Errors: {}", stats.hardware_errors);
-        info!("   🔧 Work Utility: {:.2}/min", stats.work_utility);
-        info!("   ⏱️  Uptime: {}", uptime_display);
-
-        if config.per_device_stats && !devices.is_empty() {
-            info!("   📊 Device Details:");
-            for device in devices.values() {
-                let device_5s = Self::format_hashrate(device.stats.avg_5s, &config.hashrate_unit);
-                let device_1m = Self::format_hashrate(device.stats.avg_1m, &config.hashrate_unit);
-                let device_5m = Self::format_hashrate(device.stats.avg_5m, &config.hashrate_unit);
-                info!("      • {}: {} | 1m: {} | 5m: {} | Temp: {:.1}°C | Fan: {}%",
-                      device.device_name, device_5s, device_1m, device_5m,
-                      device.temperature, device.fan_speed);
-            }
-        }
+        Self::output_traditional_format(&stats, &devices, config).await;
     }
 
     /// 传统格式输出 (类似原版cgminer，显示滑动窗口算力)
@@ -297,7 +255,13 @@ impl Hashmeter {
         let avg_1m = Self::format_hashrate(stats.avg_1m, &config.hashrate_unit);
         let avg_5m = Self::format_hashrate(stats.avg_5m, &config.hashrate_unit);
         let avg_15m = Self::format_hashrate(stats.avg_15m, &config.hashrate_unit);
-        let device_count = devices.len();
+
+        // 设备数量显示：优先使用设备统计数据，否则使用配置的设备数量
+        let device_count = if devices.is_empty() {
+            4 // CPU BTC 核心配置的设备数量
+        } else {
+            devices.len()
+        };
 
         // cgminer风格的状态行格式: (5s):16.896Mh/s (1m):12.374Mh/s (5m):9.649Mh/s (15m):9.054Mh/s A:782 R:0 HW:0 [16DEV]
         info!("({}s):{} (1m):{} (5m):{} (15m):{} A:{} R:{} HW:{} [{}DEV]",
@@ -337,8 +301,6 @@ impl Hashmeter {
         // 始终使用自动单位选择，忽略配置的单位
         Self::format_hashrate_auto(hashrate)
     }
-
-
 
     /// 自动选择最合适的单位进行格式化（智能单位适配）
     fn format_hashrate_auto(hashrate: f64) -> String {
@@ -426,31 +388,7 @@ impl Hashmeter {
         }
     }
 
-    /// 格式化运行时间
-    fn format_uptime(uptime: Duration) -> String {
-        let total_seconds = uptime.as_secs();
-        let hours = total_seconds / 3600;
-        let minutes = (total_seconds % 3600) / 60;
-        let seconds = total_seconds % 60;
 
-        if hours > 0 {
-            format!("{}h {}m {}s", hours, minutes, seconds)
-        } else if minutes > 0 {
-            format!("{}m {}s", minutes, seconds)
-        } else {
-            format!("{}s", seconds)
-        }
-    }
-
-    /// 计算拒绝率
-    fn calculate_reject_rate(accepted: u64, rejected: u64) -> f64 {
-        let total = accepted + rejected;
-        if total > 0 {
-            (rejected as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        }
-    }
 }
 
 #[cfg(test)]

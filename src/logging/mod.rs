@@ -1,8 +1,6 @@
 //! 美化日志系统
 
 pub mod formatter;
-pub mod hashmeter;
-pub mod mining_logger;
 
 use crate::error::MiningError;
 use std::path::Path;
@@ -84,10 +82,10 @@ pub fn init_logging(config: LogConfig) -> Result<(), MiningError> {
     let console_layer = if config.pretty {
         fmt::layer()
             .with_ansi(config.colored)
-            .with_target(config.show_target)
-            .with_thread_ids(config.show_thread_id)
-            .with_span_events(FmtSpan::CLOSE)
-            .event_format(formatter::MiningFormatter::new(config.colored))
+            .with_target(false)  // 关闭目标模块显示，简化输出
+            .with_thread_ids(false)  // 关闭线程ID显示，简化输出
+            .with_span_events(FmtSpan::NONE)  // 关闭span事件，简化输出
+            .event_format(formatter::CgminerFormatter::new(config.colored))  // 使用简洁格式化器
             .boxed()
     } else {
         fmt::layer()

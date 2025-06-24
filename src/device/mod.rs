@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 pub use manager::DeviceManager;
 pub use traits::ChainController;
-pub use traits::{MiningDevice, DeviceDriver};
+pub use traits::MiningDevice;
 pub use device_core_mapper::{DeviceCoreMapper, DeviceCoreMapping, MappingStats};
 
 /// 设备状态枚举

@@ -15,7 +15,7 @@ categories = ["hardware-support", "network-programming"]
 # Core libraries - 指向外部目录
 cgminer-core = { path = "../cgminer-core" }
 cgminer-cpu-btc-core = { path = "../cgminer-cpu-btc-core", optional = true }
-# cgminer-gpu-btc-core = { path = "../cgminer-gpu-btc-core", optional = true }  # 暂时禁用，需要修正接口
+cgminer-gpu-btc-core = { path = "../cgminer-gpu-btc-core", optional = true }
 cgminer-asic-maijie-l7-core = { path = "../cgminer-asic-maijie-l7-core", optional = true }
 
 # Async runtime
@@ -133,12 +133,13 @@ default = ["cpu-btc"]
 
 # 核心特性
 cpu-btc = ["cgminer-cpu-btc-core"]
-# btc-gpu = ["cgminer-gpu-btc-core"]  # 暂时禁用
+gpu-btc = ["cgminer-gpu-btc-core"]
 maijie-l7 = ["cgminer-asic-maijie-l7-core"]
 
 # 组合特性
-all-cores = ["cpu-btc", "maijie-l7"]  # 暂时移除 btc-gpu
-hardware-only = ["maijie-l7"]  # 暂时移除 btc-gpu
+all-cores = ["cpu-btc", "gpu-btc", "maijie-l7"]
+hardware-only = ["gpu-btc", "maijie-l7"]
+gpu-only = ["gpu-btc"]
 software-only = ["cpu-btc"]
 # gpu-only = ["btc-gpu"]  # 暂时禁用
 
@@ -150,4 +151,4 @@ web-ui = []
 # [[bench]]
 # name = "gpu_btc_core_benchmark"
 # harness = false
-# required-features = ["btc-gpu"]
+# required-features = ["gpu-btc"]

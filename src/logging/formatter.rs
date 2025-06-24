@@ -19,6 +19,68 @@ impl MiningFormatter {
     }
 }
 
+/// CGMiner风格的简洁日志格式化器
+pub struct CgminerFormatter {
+    /// 是否启用彩色输出
+    colored: bool,
+}
+
+impl CgminerFormatter {
+    /// 创建新的 CGMiner 风格格式化器
+    pub fn new(colored: bool) -> Self {
+        Self { colored }
+    }
+}
+
+impl<S, N> FormatEvent<S, N> for CgminerFormatter
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> fmt::Result {
+        let metadata = event.metadata();
+        let level = metadata.level();
+
+        // 获取当前时间，简化格式
+        let now: DateTime<Local> = Local::now();
+        let timestamp = now.format("%H:%M:%S");
+
+        // 级别颜色和简化标识
+        let (level_str, level_color) = if self.colored {
+            match *level {
+                tracing::Level::ERROR => ("ERR", "\x1b[31m"), // 红色
+                tracing::Level::WARN => ("WRN", "\x1b[33m"),  // 黄色
+                tracing::Level::INFO => ("   ", "\x1b[32m"),  // 绿色，不显示INFO
+                tracing::Level::DEBUG => ("DBG", "\x1b[36m"), // 青色
+                tracing::Level::TRACE => ("TRC", "\x1b[37m"), // 白色
+            }
+        } else {
+            match *level {
+                tracing::Level::ERROR => ("ERR", ""),
+                tracing::Level::WARN => ("WRN", ""),
+                tracing::Level::INFO => ("   ", ""),
+                tracing::Level::DEBUG => ("DBG", ""),
+                tracing::Level::TRACE => ("TRC", ""),
+            }
+        };
+
+        let reset = if self.colored { "\x1b[0m" } else { "" };
+
+        // CGMiner风格：[时间] 级别 消息
+        write!(writer, "[{}] {}{}{} ", timestamp, level_color, level_str, reset)?;
+
+        // 写入消息
+        ctx.field_format().format_fields(writer.by_ref(), event)?;
+
+        writeln!(writer)
+    }
+}
+
 impl<S, N> FormatEvent<S, N> for MiningFormatter
 where
     S: Subscriber + for<'a> LookupSpan<'a>,

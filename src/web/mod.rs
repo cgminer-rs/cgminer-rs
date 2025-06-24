@@ -76,7 +76,10 @@ impl WebServer {
         // 启动服务器
         let addr = format!("{}:{}", self.config.bind_address, self.config.port)
             .parse::<std::net::SocketAddr>()
-            .map_err(|e| MiningError::configuration(format!("Invalid bind address: {}", e)))?;
+            .map_err(|e| MiningError::Config(crate::error::ConfigError::ValidationError {
+            field: "bind_address".to_string(),
+            reason: format!("Invalid bind address: {}", e),
+        }))?;
 
         let server = warp::serve(routes).run(addr);
         let handle = tokio::spawn(server);

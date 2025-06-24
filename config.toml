@@ -18,6 +18,9 @@ work_restart_timeout = 60
 # 扫描时间间隔 (秒)
 scan_time = 30
 
+# 结果收集间隔 (毫秒) - 挖矿核心结果收集频率
+result_collection_interval_ms = 20
+
 # =============================================================================
 # 核心配置 (默认使用软算法核心)
 # =============================================================================
@@ -43,6 +46,16 @@ work_timeout_ms = 1500       # 工作超时: 1.5秒
 enabled = false              # Mac M4: 禁用CPU绑定，依赖系统调度
 strategy = "intelligent"     # 智能策略
 prefer_performance_cores = true  # 优先使用性能核心
+
+# GPU-BTC 核心配置 - 使用 cgminer-gpu-btc-core
+[cores.gpu_btc]
+enabled = false              # 默认禁用，需要时启用
+device_count = 1             # GPU设备数量: 通常Mac只有1个GPU
+max_hashrate = 1000000000000.0  # 最大算力: 1 TH/s (GPU理论算力)
+work_size = 65536            # 工作组大小: Mac M4 GPU优化值
+backend = "metal"            # GPU后端: metal (Mac), opencl, cuda
+threads_per_threadgroup = 1024  # Metal线程组大小
+work_timeout_ms = 2000       # 工作超时: 2秒
 
 # ASIC核心配置 (默认禁用)
 [cores.asic_core]
@@ -150,3 +163,18 @@ max_memory_usage = 90.0
 max_device_temperature = 85.0
 max_error_rate = 5.0
 min_hashrate = 50.0
+
+# =============================================================================
+# 算力计量器配置
+# =============================================================================
+[hashmeter]
+# 是否启用算力计量器
+enabled = true
+# 算力统计间隔 (秒)
+interval = 5
+# 日志输出间隔 (秒)
+log_interval = 5
+# 是否显示设备级别统计
+per_device_stats = false
+# 是否启用控制台输出
+console_output = true

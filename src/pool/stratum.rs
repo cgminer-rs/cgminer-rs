@@ -3,7 +3,7 @@ use crate::device::Work;
 use crate::pool::Share;
 use crate::pool::proxy::ProxyConnector;
 use crate::config::ProxyConfig;
-use crate::logging::mining_logger::MiningLogger;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -65,8 +65,7 @@ pub struct StratumClient {
     pending_requests: Arc<RwLock<HashMap<u64, tokio::sync::oneshot::Sender<StratumMessage>>>>,
     /// 矿池ID
     pool_id: u32,
-    /// 挖矿日志记录器
-    mining_logger: Arc<MiningLogger>,
+
 }
 
 /// Stratum 作业
@@ -85,7 +84,7 @@ pub struct StratumJob {
 
 impl StratumClient {
     /// 创建新的 Stratum 客户端
-    pub async fn new(url: String, username: String, password: String, pool_id: u32, verbose: bool, proxy_config: Option<ProxyConfig>) -> Result<Self, PoolError> {
+    pub async fn new(url: String, username: String, password: String, pool_id: u32, _verbose: bool, proxy_config: Option<ProxyConfig>) -> Result<Self, PoolError> {
         Ok(Self {
             url,
             username,
@@ -102,7 +101,7 @@ impl StratumClient {
             message_id: Arc::new(RwLock::new(1)),
             pending_requests: Arc::new(RwLock::new(HashMap::new())),
             pool_id,
-            mining_logger: Arc::new(MiningLogger::new(verbose)),
+
         })
     }
 
@@ -123,22 +122,12 @@ impl StratumClient {
             },
             Ok(Err(e)) => {
                 debug!("🔗 [Pool {}] 连接失败: {}", self.pool_id, e);
-                self.mining_logger.log_pool_connection_change(
-                    self.pool_id,
-                    &self.url,
-                    false,
-                    Some(&e.to_string())
-                );
+                warn!("Pool {} connection failed: {}", self.pool_id, e);
                 return Err(e);
             }
             Err(_) => {
                 debug!("🔗 [Pool {}] 连接超时", self.pool_id);
-                self.mining_logger.log_pool_connection_change(
-                    self.pool_id,
-                    &self.url,
-                    false,
-                    Some("连接超时")
-                );
+                warn!("Pool {} connection timeout", self.pool_id);
                 return Err(PoolError::Timeout { url: self.url.clone() });
             }
         };
@@ -162,7 +151,7 @@ impl StratumClient {
         debug!("🔗 [Pool {}] 发送认证请求", self.pool_id);
         self.authorize().await?;
 
-        self.mining_logger.log_pool_connection_change(self.pool_id, &self.url, true, None);
+        info!("Pool {} connected successfully", self.pool_id);
         info!("Successfully connected to Stratum pool");
         debug!("🔗 [Pool {}] 完整连接流程完成", self.pool_id);
         Ok(())
@@ -188,7 +177,7 @@ impl StratumClient {
         *self.current_job.write().await = None;
         self.pending_requests.write().await.clear();
 
-        self.mining_logger.log_pool_connection_change(self.pool_id, &self.url, false, Some("主动断开"));
+        info!("Pool {} disconnected", self.pool_id);
         info!("Disconnected from Stratum pool");
         Ok(())
     }
@@ -344,15 +333,7 @@ impl StratumClient {
     /// 提交份额
     pub async fn submit_share(&self, share: &Share) -> Result<bool, PoolError> {
         // 记录份额提交详情
-        self.mining_logger.log_share_submit_details(
-            self.pool_id,
-            share.device_id,
-            &share.job_id,
-            share.nonce,
-            share.ntime,
-            &share.extra_nonce2,
-            share.difficulty,
-        );
+        debug!("Pool {} submitting share from device {}", self.pool_id, share.device_id);
 
         debug!("Submitting share: job_id={}, nonce={:08x}, ntime={:08x}",
                share.job_id, share.nonce, share.ntime);
@@ -392,13 +373,11 @@ impl StratumClient {
             let accepted = result.as_bool().unwrap_or(false);
 
             // 记录份额提交结果
-            self.mining_logger.log_share_result(
-                self.pool_id,
-                share.device_id,
-                accepted,
-                share.difficulty,
-                None,
-            );
+            if accepted {
+                info!("Accepted share from device {}", share.device_id);
+            } else {
+                info!("Rejected share from device {}", share.device_id);
+            }
 
             if accepted {
                 debug!("Share accepted by pool");
@@ -408,25 +387,13 @@ impl StratumClient {
             Ok(accepted)
         } else if let Some(error) = response.error {
             // 记录拒绝的份额
-            self.mining_logger.log_share_result(
-                self.pool_id,
-                share.device_id,
-                false,
-                share.difficulty,
-                Some(&error.message),
-            );
+            warn!("Rejected share from device {}: {}", share.device_id, error.message);
 
             warn!("Share rejected: {}", error.message);
             Err(PoolError::ShareRejected { reason: error.message })
         } else {
             // 记录未知响应
-            self.mining_logger.log_share_result(
-                self.pool_id,
-                share.device_id,
-                false,
-                share.difficulty,
-                Some("未知响应格式"),
-            );
+            warn!("Unknown response format for share submission from device {}", share.device_id);
 
             warn!("Unknown response format for share submission");
             Ok(false)
@@ -686,7 +653,7 @@ impl StratumClient {
         let pending_requests = self.pending_requests.clone();
         let current_job = self.current_job.clone();
         let difficulty = self.difficulty.clone();
-        let mining_logger = self.mining_logger.clone();
+
         let pool_id = self.pool_id;
 
         tokio::spawn(async move {
@@ -735,14 +702,8 @@ impl StratumClient {
                                             if let Some(params) = &message.params {
                                                 if let Some(job) = Self::parse_job_notification(params) {
                                                     // 记录新工作接收
-                                                    let current_difficulty = *difficulty.read().await;
-                                                    mining_logger.log_work_received(
-                                                        pool_id,
-                                                        &job.job_id,
-                                                        &job.previous_hash,
-                                                        job.clean_jobs,
-                                                        current_difficulty,
-                                                    );
+                                                    let _current_difficulty = *difficulty.read().await;
+                                                    info!("Pool {} new job: {}", pool_id, job.job_id);
 
                                                     *current_job.write().await = Some(job);
                                                 }
@@ -760,11 +721,7 @@ impl StratumClient {
 
                                                             // 记录难度变化
                                                             if old_difficulty != diff {
-                                                                mining_logger.log_difficulty_change(
-                                                                    pool_id,
-                                                                    old_difficulty,
-                                                                    diff,
-                                                                );
+                                                                info!("Pool {} difficulty changed from {} to {}", pool_id, old_difficulty, diff);
                                                             }
 
                                                             debug!("Difficulty updated to: {}", diff);
