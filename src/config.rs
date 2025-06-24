@@ -89,6 +89,7 @@ pub struct CoresConfig {
     pub enabled_cores: Vec<String>,
     pub default_core: String,
     pub cpu_btc: Option<BtcSoftwareCoreConfig>,
+    pub gpu_btc: Option<GpuBtcCoreConfig>,
     pub maijie_l7: Option<MaijieL7CoreConfig>,
 }
 
@@ -118,6 +119,16 @@ pub struct CpuAffinityConfig {
     pub avoid_hyperthreading: Option<bool>,
     /// 是否优先使用性能核心
     pub prefer_performance_cores: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct GpuBtcCoreConfig {
+    pub enabled: bool,
+    pub device_count: u32,
+    pub max_hashrate: f64,
+    pub work_size: u32,
+    pub work_timeout_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -385,6 +396,13 @@ impl Default for Config {
                         prefer_performance_cores: Some(true),
                     }),
                 }),
+                gpu_btc: Some(GpuBtcCoreConfig {
+                    enabled: false, // 默认禁用，需要用户手动启用
+                    device_count: 1,
+                    max_hashrate: 1_000_000_000_000.0, // 1 TH/s
+                    work_size: 32768, // 32K 工作项
+                    work_timeout_ms: 2000,
+                }),
                 maijie_l7: Some(MaijieL7CoreConfig {
                     enabled: false,
                     chain_count: 3,
@@ -614,14 +632,8 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
-        // 验证核心配置
-        if self.cores.enabled_cores.is_empty() {
-            anyhow::bail!("At least one core must be enabled");
-        }
-
-        if !self.cores.enabled_cores.contains(&self.cores.default_core) {
-            anyhow::bail!("Default core '{}' must be in enabled cores list", self.cores.default_core);
-        }
+        // 注意：核心配置现在完全由编译特性和系统优先级逻辑控制
+        // enabled_cores和default_core都不再需要配置验证
 
         // 验证Bitcoin软算法核心配置
         if let Some(cpu_btc_config) = &self.cores.cpu_btc {

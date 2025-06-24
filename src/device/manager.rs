@@ -256,6 +256,7 @@ impl DeviceManager {
         let core_prefix = match factory_name {
             "Software Mining Core" => "cpu-btc",
             "Maijie L7 Core" => "maijie-l7",
+            "GPU Mining Core Factory" => "gpu-btc",
             _ => {
                 return Err(DeviceError::InitializationFailed {
                     device_id: 0,
@@ -265,16 +266,26 @@ impl DeviceManager {
         };
 
         // 在活跃核心列表中查找匹配的核心实例
-        for core_id in &self.active_core_ids {
-            if core_id.starts_with(core_prefix) {
-                return Ok(core_id.clone());
-            }
+        let matching_cores: Vec<_> = self.active_core_ids.iter()
+            .filter(|core_id| core_id.starts_with(core_prefix))
+            .collect();
+
+        if matching_cores.is_empty() {
+            return Err(DeviceError::InitializationFailed {
+                device_id: 0,
+                reason: format!("未找到工厂 {} 对应的活跃核心实例", factory_name),
+            });
         }
 
-        Err(DeviceError::InitializationFailed {
-            device_id: 0,
-            reason: format!("未找到工厂 {} 对应的活跃核心实例", factory_name),
-        })
+        // 如果有多个匹配的核心，记录日志并使用第一个
+        if matching_cores.len() > 1 {
+            debug!("📋 工厂 {} 找到多个匹配的核心: {:?}，使用第一个: {}",
+                   factory_name, matching_cores, matching_cores[0]);
+        }
+
+        let selected_core = matching_cores[0].clone();
+        debug!("✅ 工厂 {} 选择核心: {}", factory_name, selected_core);
+        Ok(selected_core)
     }
 
     /// 从核心实例扫描设备（从factory移植）
@@ -287,15 +298,17 @@ impl DeviceManager {
                 Ok(devices)
             }
             Err(e) => {
-                warn!("核心 {} 扫描设备失败: {}", core_id, e);
-                // 如果核心扫描失败，回退到生成设备信息的方式
-                if core_id.starts_with("cpu-btc") {
-                    self.generate_software_device_infos().await
-                } else if core_id.starts_with("maijie-l7") {
-                    self.generate_asic_device_infos().await
-                } else {
-                    Ok(Vec::new())
-                }
+                            warn!("核心 {} 扫描设备失败: {}", core_id, e);
+            // 如果核心扫描失败，回退到生成设备信息的方式
+            if core_id.starts_with("cpu-btc") {
+                self.generate_software_device_infos().await
+            } else if core_id.starts_with("maijie-l7") {
+                self.generate_asic_device_infos().await
+            } else if core_id.starts_with("gpu-btc") {
+                self.generate_gpu_device_infos().await
+            } else {
+                Ok(Vec::new())
+            }
             }
         }
     }
@@ -369,6 +382,59 @@ impl DeviceManager {
         Ok(devices)
     }
 
+    /// 生成GPU设备信息
+    async fn generate_gpu_device_infos(&self) -> Result<Vec<cgminer_core::DeviceInfo>, cgminer_core::CoreError> {
+        // 从完整配置中读取设备数量
+        let device_count = if let Some(ref full_config) = self.full_config {
+            if let Some(ref gpu_btc_config) = full_config.cores.gpu_btc {
+                gpu_btc_config.device_count
+            } else {
+                1 // 默认值
+            }
+        } else {
+            1 // 默认值
+        };
+
+        info!("🔧 生成 {} 个GPU设备", device_count);
+        let mut devices = Vec::new();
+
+        for i in 0..device_count {
+            // 根据平台选择合适的设备类型
+            let device_type = if cfg!(all(feature = "mac-metal", target_os = "macos")) {
+                "mac-metal".to_string()  // Mac平台使用metal类型
+            } else if cfg!(feature = "nvidia-cuda") {
+                "nvidia-cuda".to_string()
+            } else if cfg!(feature = "amd-opencl") {
+                "amd-opencl".to_string()
+            } else if cfg!(feature = "intel-opencl") {
+                "intel-opencl".to_string()
+            } else {
+                "gpu".to_string()  // 回退到通用GPU类型
+            };
+
+            let device_info = cgminer_core::DeviceInfo {
+                id: i + 200, // GPU设备从200开始编号
+                name: format!("GPU-BTC-{}", i + 1),
+                device_type,
+                chain_id: i as u8,
+                device_path: None,
+                serial_number: None,
+                firmware_version: None,
+                hardware_version: None,
+                chip_count: Some(1),
+                temperature: Some(55.0),  // GPU默认温度
+                voltage: Some(1000),      // GPU默认电压 (mV)
+                frequency: Some(1000),    // GPU默认频率 (MHz)
+                fan_speed: Some(50),      // GPU默认风扇转速
+                created_at: std::time::SystemTime::now(),
+                updated_at: std::time::SystemTime::now(),
+            };
+            devices.push(device_info);
+        }
+
+        Ok(devices)
+    }
+
     /// 创建设备实例（从factory移植的核心功能）
     async fn create_device_instance(&self, device_info: cgminer_core::DeviceInfo) -> Result<Box<dyn MiningDevice>, DeviceError> {
         // 根据设备类型选择对应的核心
@@ -392,6 +458,40 @@ impl DeviceManager {
                     chip_count: 1,
                     temperature_limit: 85.0,
                     fan_speed: None,
+                };
+
+                (core_id.clone(), device_config)
+            }
+            // GPU大类 - 包括所有GPU平台类型
+            "gpu" | "mac-metal" | "nvidia-cuda" | "amd-opencl" | "intel-opencl" | "generic-opencl" => {
+                let core_id = self.active_core_ids.iter()
+                    .find(|id| id.contains("gpu") || id.contains("gpu-btc"))
+                    .ok_or_else(|| {
+                        DeviceError::InitializationFailed {
+                            device_id: device_info.id,
+                            reason: format!("GPU核心不可用 (设备类型: {})", device_info.device_type),
+                        }
+                    })?;
+
+                // 根据具体GPU平台调整配置
+                let (frequency, voltage, fan_speed) = match device_info.device_type.as_str() {
+                    "mac-metal" => (1200, 1100, None),           // Mac Metal GPU 更高性能
+                    "nvidia-cuda" => (1100, 1050, Some(60)),     // NVIDIA CUDA GPU
+                    "amd-opencl" => (1000, 1000, Some(50)),      // AMD OpenCL GPU
+                    "intel-opencl" => (900, 950, Some(40)),      // Intel OpenCL GPU
+                    "generic-opencl" => (1000, 1000, Some(50)),  // 通用 OpenCL GPU
+                    _ => (1000, 1000, Some(50)),                 // 默认GPU配置
+                };
+
+                let device_config = crate::device::DeviceConfig {
+                    chain_id: device_info.chain_id,
+                    enabled: true,
+                    frequency,
+                    voltage,
+                    auto_tune: true,   // GPU支持自动调优
+                    chip_count: 1,     // GPU通常为1个处理单元
+                    temperature_limit: 85.0, // GPU温度限制
+                    fan_speed,
                 };
 
                 (core_id.clone(), device_config)
@@ -421,7 +521,7 @@ impl DeviceManager {
             }
             _ => {
                 return Err(DeviceError::InvalidConfig {
-                    reason: format!("不支持的设备类型: {}", device_info.device_type),
+                    reason: format!("不支持的设备类型: {}。支持的类型：software, gpu, mac-metal, nvidia-cuda, amd-opencl, intel-opencl, generic-opencl, asic", device_info.device_type),
                 });
             }
         };

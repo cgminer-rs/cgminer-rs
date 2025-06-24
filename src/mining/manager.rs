@@ -122,9 +122,9 @@ impl MiningManager {
     /// 根据配置的核心类型注册相应的设备驱动
     async fn register_drivers_for_cores(
         _device_manager: &mut DeviceManager,
-        cores_config: &crate::config::CoresConfig
+        _cores_config: &crate::config::CoresConfig
     ) -> Result<(), MiningError> {
-        debug!("Registering drivers for cores: {:?}", cores_config.enabled_cores);
+        debug!("Registering drivers for compiled core features");
         Ok(())
     }
 
@@ -272,13 +272,20 @@ impl MiningManager {
               first_pool.map(|p| p.url.as_str()).unwrap_or("unknown"),
               self.full_config.pools.pools.len());
 
-        // 获取实际创建的设备数量（优先使用配置的数量，因为更准确）
+        // 获取实际创建的设备数量（基于已编译的核心工厂）
         let actual_device_count = {
             let mut total_devices = 0u32;
 
-            for core_type in &self.full_config.cores.enabled_cores {
-                match core_type.as_str() {
-                    "cpu-btc" | "software" | "cpu" | "btc" => {
+            // 重新获取可用的核心工厂列表
+            let available_factories = match self.core_registry.list_factories().await {
+                Ok(factories) => factories,
+                Err(_) => vec![], // 如果获取失败，使用空列表
+            };
+
+            // 基于可用的核心工厂来计算设备数量
+            for factory_info in &available_factories {
+                match factory_info.name.as_str() {
+                    "Software Mining Core" => {
                         // CPU核心：使用配置的device_count
                         if let Some(cpu_btc_config) = &self.full_config.cores.cpu_btc {
                             total_devices += cpu_btc_config.device_count;
@@ -286,7 +293,7 @@ impl MiningManager {
                             total_devices += 4; // 默认4个CPU设备
                         }
                     }
-                    "asic" | "maijie-l7" | "l7" => {
+                    "Maijie L7 Core" => {
                         // ASIC核心：使用chains配置（只有在ASIC启用时）
                         if let Some(maijie_l7_config) = &self.full_config.cores.maijie_l7 {
                             if maijie_l7_config.enabled {
@@ -294,9 +301,13 @@ impl MiningManager {
                             }
                         }
                     }
-                    "gpu" => {
-                        // GPU核心：通常是1个设备
-                        total_devices += 1;
+                    "GPU Mining Core Factory" => {
+                        // GPU核心：使用配置的device_count或默认1个
+                        if let Some(gpu_btc_config) = &self.full_config.cores.gpu_btc {
+                            total_devices += gpu_btc_config.device_count;
+                        } else {
+                            total_devices += 1; // 默认1个GPU设备
+                        }
                     }
                     _ => {
                         // 未知核心类型，默认1个设备
@@ -312,8 +323,14 @@ impl MiningManager {
             }
         };
 
-        info!("Loaded {} cores, {} devices ready",
-              self.full_config.cores.enabled_cores.len(),
+        // 再次获取可用工厂数量用于显示
+        let factories_count = match self.core_registry.list_factories().await {
+            Ok(factories) => factories.len(),
+            Err(_) => 0,
+        };
+
+        info!("Loaded {} compiled core factories, {} devices ready",
+              factories_count,
               actual_device_count);
         Ok(())
     }
@@ -727,17 +744,28 @@ impl MiningManager {
             }
         }
 
-        // 如果没有活跃的核心，则创建新的核心
-        debug!("No active cores found, creating new cores");
+        // 如果没有活跃的核心，则基于编译特性创建核心
+        debug!("No active cores found, creating cores based on compiled features");
 
-        // 获取启用的核心类型
-        let enabled_cores = &self.full_config.cores.enabled_cores;
+        // 获取编译时已注册的核心工厂列表
+        let available_factories = match self.core_registry.list_factories().await {
+            Ok(factories) => factories,
+            Err(e) => {
+                error!("Failed to list available core factories: {}", e);
+                return Err(MiningError::CoreError(format!("获取可用核心工厂失败: {}", e)));
+            }
+        };
+
+        info!("Found {} compiled core factories: {:?}",
+              available_factories.len(),
+              available_factories.iter().map(|f| &f.name).collect::<Vec<_>>());
 
         let mut created_cores = Vec::new();
 
-        for core_type in enabled_cores {
-            match core_type.as_str() {
-                "software" | "cpu-btc" | "btc" | "cpu" => {
+        // 第一步：基于编译特性创建所有可用的核心（不立即启动）
+        for factory_info in &available_factories {
+            match factory_info.name.as_str() {
+                "Software Mining Core" => {
                     debug!("Creating CPU BTC core");
 
                     // 创建软算法核心配置
@@ -759,28 +787,59 @@ impl MiningManager {
                         },
                     };
 
-                    // 创建软算法核心
+                    // 创建软算法核心（不启动）
                     let core_id = self.create_core("cpu-btc", core_config).await?;
 
                     // 检查核心是否创建成功
                     if self.core_registry.get_core(&core_id).await
                         .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))?.is_some() {
                         debug!("CPU BTC core created: {}", core_id);
-
-                        // 启动软算法核心
-                        match self.core_registry.start_core(&core_id).await {
-                            Ok(()) => {
-                                debug!("CPU BTC core started: {}", core_id);
-                                created_cores.push(core_id);
-                            }
-                            Err(e) => {
-                                error!("Failed to start CPU BTC core {}: {}", core_id, e);
-                                return Err(MiningError::CoreError(format!("启动核心失败: {}", e)));
-                            }
-                        }
+                        created_cores.push(core_id);
                     }
                 }
-                "asic" | "maijie-l7" | "l7" => {
+                "GPU Mining Core Factory" => {
+                    debug!("Creating GPU BTC core");
+
+                    // 创建GPU核心配置
+                    let core_config = CoreConfig {
+                        name: "gpu_core".to_string(),
+                        enabled: true,
+                        devices: vec![],
+                        custom_params: {
+                            let mut params = std::collections::HashMap::new();
+                            if let Some(gpu_btc_config) = &self.full_config.cores.gpu_btc {
+                                params.insert("device_count".to_string(), serde_json::Value::Number(serde_json::Number::from(gpu_btc_config.device_count)));
+                                params.insert("max_hashrate".to_string(), serde_json::Value::Number(serde_json::Number::from_f64(gpu_btc_config.max_hashrate).unwrap()));
+                                params.insert("work_size".to_string(), serde_json::Value::Number(serde_json::Number::from(gpu_btc_config.work_size)));
+                                params.insert("work_timeout_ms".to_string(), serde_json::Value::Number(serde_json::Number::from(gpu_btc_config.work_timeout_ms)));
+
+                                // 平台特定配置
+                                #[cfg(target_os = "macos")]
+                                {
+                                    params.insert("backend".to_string(), serde_json::Value::String("metal".to_string()));
+                                    params.insert("threads_per_threadgroup".to_string(), serde_json::Value::Number(serde_json::Number::from(512)));
+                                }
+
+                                #[cfg(not(target_os = "macos"))]
+                                {
+                                    params.insert("backend".to_string(), serde_json::Value::String("opencl".to_string()));
+                                }
+                            }
+                            params
+                        },
+                    };
+
+                    // 创建GPU核心（不启动）
+                    let core_id = self.create_core("gpu-btc", core_config).await?;
+
+                    // 检查核心是否创建成功
+                    if self.core_registry.get_core(&core_id).await
+                        .map_err(|e| MiningError::CoreError(format!("获取核心失败: {}", e)))?.is_some() {
+                        debug!("GPU BTC core created: {}", core_id);
+                        created_cores.push(core_id);
+                    }
+                }
+                "Maijie L7 Core" => {
                     if let Some(maijie_l7_config) = &self.full_config.cores.maijie_l7 {
                         if maijie_l7_config.enabled {
                             debug!("Creating Maijie L7 ASIC core");
@@ -801,6 +860,7 @@ impl MiningManager {
                                 },
                             };
 
+                            // 创建ASIC核心（不启动）
                             let core_id = self.create_core("maijie-l7", core_config).await?;
 
                             if self.core_registry.get_core(&core_id).await
@@ -812,14 +872,47 @@ impl MiningManager {
                     }
                 }
                 _ => {
-                    debug!("Unknown core type: {}", core_type);
+                    debug!("Unknown core factory: {}", factory_info.name);
                 }
             }
         }
 
+        // 第二步：如果创建了多个核心，使用优先级选择最优核心启动
         if !created_cores.is_empty() {
-            info!("Initialized {} mining cores", created_cores.len());
+            info!("Created {} mining cores", created_cores.len());
+
+            if created_cores.len() == 1 {
+                // 只有一个核心，直接启动
+                let core_id = &created_cores[0];
+                match self.core_registry.start_core(core_id).await {
+                    Ok(()) => {
+                        info!("Started mining core: {}", core_id);
+                    }
+                    Err(e) => {
+                        error!("Failed to start core {}: {}", core_id, e);
+                        return Err(MiningError::CoreError(format!("启动核心失败: {}", e)));
+                    }
+                }
+            } else {
+                // 多个核心，使用优先级选择
+                let selected_core = self.select_optimal_core(&created_cores).await?;
+
+                info!("Selected optimal core: {} (priority: asic > gpu > cpu)", selected_core);
+
+                match self.core_registry.start_core(&selected_core).await {
+                    Ok(()) => {
+                        info!("Started optimal mining core: {}", selected_core);
+                    }
+                    Err(e) => {
+                        error!("Failed to start selected core {}: {}", selected_core, e);
+                        return Err(MiningError::CoreError(format!("启动最优核心失败: {}", e)));
+                    }
+                }
+            }
+        } else {
+            warn!("No mining cores were created");
         }
+
         Ok(())
     }
 
@@ -832,9 +925,9 @@ impl MiningManager {
             if core_id.contains("asic") || core_id.contains("maijie") || core_id.contains("l7") {
                 1 // ASIC 最高优先级
             } else if core_id.contains("gpu") {
-                2 // GPU 中等优先级
-            } else if core_id.contains("cpu") || core_id.contains("btc") || core_id.contains("software") {
-                3 // CPU 最低优先级
+                2 // GPU 中等优先级 - 必须在CPU判断之前！
+            } else if core_id.contains("cpu") || core_id.contains("software") {
+                3 // CPU 最低优先级 - 移除了"btc"关键字避免与GPU冲突
             } else {
                 4 // 未知类型，最低优先级
             }

@@ -25,13 +25,16 @@ result_collection_interval_ms = 20
 # 核心配置 (默认使用软算法核心)
 # =============================================================================
 [cores]
-# 注意：启用的核心现在完全由编译特性决定 (cargo build --features="cpu-btc,gpu-btc")
-# default_core和enabled_cores都由系统的核心优先级逻辑自动选择 (ASIC > GPU > CPU)
+# 启用的核心列表 - 只测试CPU核心
+enabled_cores = ["cpu-btc"]
+
+# 默认核心
+default_core = "cpu-btc"
 
 # CPU-BTC 核心配置 - 使用 cgminer-cpu-btc-core
 [cores.cpu_btc]
 enabled = true
-device_count = 16             # 设备数量: 4个虚拟设备
+device_count = 4             # 设备数量: 4个虚拟设备
 min_hashrate = 30000000.0    # 最小算力: 30 MH/s (实际cgminer-cpu-btc-core算力)
 max_hashrate = 40000000.0    # 最大算力: 40 MH/s (实际cgminer-cpu-btc-core算力)
 error_rate = 0.002           # 错误率: 0.2%
@@ -46,7 +49,7 @@ prefer_performance_cores = true  # 优先使用性能核心
 
 # GPU-BTC 核心配置 - 使用 cgminer-gpu-btc-core
 [cores.gpu_btc]
-enabled = true               # 启用GPU核心以配合--features=gpu-btc
+enabled = false              # 禁用GPU核心，只测试CPU核心
 device_count = 1             # GPU设备数量: 通常Mac只有1个GPU
 max_hashrate = 1000000000000.0  # 最大算力: 1 TH/s (GPU理论算力)
 work_size = 65536            # 工作组大小: Mac M4 GPU优化值
