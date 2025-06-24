@@ -3,7 +3,7 @@ pub mod work_queue;
 pub mod hashmeter;
 
 use crate::config::Config;
-use crate::device::Work;
+use cgminer_core::Work;
 use cgminer_core::types::MiningResult;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime};
@@ -154,6 +154,8 @@ pub enum WorkDistributionStrategy {
 pub struct MiningConfig {
     pub work_restart_timeout: Duration,
     pub scan_interval: Duration,
+    /// 结果收集间隔 - 从配置文件读取
+    pub result_collection_interval: Duration,
     pub work_distribution_strategy: WorkDistributionStrategy,
     pub max_work_queue_size: usize,
     pub max_result_queue_size: usize,
@@ -168,6 +170,7 @@ impl Default for MiningConfig {
         Self {
             work_restart_timeout: Duration::from_secs(60),
             scan_interval: Duration::from_secs(30),
+            result_collection_interval: Duration::from_millis(20),
             work_distribution_strategy: WorkDistributionStrategy::LoadBalance,
             max_work_queue_size: 1000,
             max_result_queue_size: 1000,
@@ -184,6 +187,7 @@ impl From<&Config> for MiningConfig {
         Self {
             work_restart_timeout: Duration::from_secs(config.general.work_restart_timeout),
             scan_interval: Duration::from_secs(config.general.scan_time),
+            result_collection_interval: Duration::from_millis(config.general.result_collection_interval_ms),
             work_distribution_strategy: WorkDistributionStrategy::LoadBalance,
             max_work_queue_size: 1000, // 可以从配置中读取
             max_result_queue_size: 1000,

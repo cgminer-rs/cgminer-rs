@@ -54,6 +54,7 @@ pub struct Args {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     pub general: GeneralConfig,
     pub cores: CoresConfig,
@@ -61,23 +62,29 @@ pub struct Config {
     pub pools: PoolConfig,
     pub api: ApiConfig,
     pub monitoring: MonitoringConfig,
+    #[serde(default)]
     pub web: WebConfig,
+    #[serde(default)]
     pub hashmeter: HashmeterConfig,
     pub performance: Option<PerformanceConfig>,
     pub limits: Option<LimitsConfig>,
     pub logging: Option<LoggingConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct GeneralConfig {
     pub log_level: String,
     pub log_file: Option<PathBuf>,
     pub pid_file: Option<PathBuf>,
     pub work_restart_timeout: u64,
     pub scan_time: u64,
+    /// 结果收集间隔 (毫秒) - 参考原版cgminer的ASIC轮询延迟
+    pub result_collection_interval_ms: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct CoresConfig {
     pub enabled_cores: Vec<String>,
     pub default_core: String,
@@ -85,7 +92,8 @@ pub struct CoresConfig {
     pub maijie_l7: Option<MaijieL7CoreConfig>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct BtcSoftwareCoreConfig {
     pub enabled: bool,
     pub device_count: u32,
@@ -123,7 +131,8 @@ pub struct MaijieL7CoreConfig {
     pub cooling_mode: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct DeviceConfig {
     pub auto_detect: bool,
     pub scan_interval: u64,
@@ -140,7 +149,8 @@ pub struct ChainConfig {
     pub chip_count: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct PoolConfig {
     pub strategy: PoolStrategy,
     pub failover_timeout: u64,
@@ -155,6 +165,12 @@ pub enum PoolStrategy {
     RoundRobin,
     LoadBalance,
     Quota,
+}
+
+impl Default for PoolStrategy {
+    fn default() -> Self {
+        PoolStrategy::Failover  // 默认使用故障转移策略
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,7 +202,8 @@ pub struct ProxyConfig {
     pub password: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct ApiConfig {
     pub enabled: bool,
     pub bind_address: String,
@@ -195,7 +212,8 @@ pub struct ApiConfig {
     pub auth_token: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct MonitoringConfig {
     pub enabled: bool,
     pub metrics_interval: u64,
@@ -203,7 +221,7 @@ pub struct MonitoringConfig {
     pub alert_thresholds: AlertThresholds,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AlertThresholds {
     pub temperature_warning: f32,
     pub temperature_critical: f32,
@@ -346,6 +364,7 @@ impl Default for Config {
                 pid_file: Some(PathBuf::from("/tmp/cgminer-rs.pid")),
                 work_restart_timeout: 60,
                 scan_time: 30,
+                result_collection_interval_ms: 20,
             },
             cores: CoresConfig {
                 enabled_cores: vec!["cpu-btc".to_string()],

@@ -177,6 +177,39 @@ impl MiningManager {
         Ok(())
     }
 
+    /// 注册核心（为示例程序提供接口）
+    pub async fn register_core(&self, core_info: cgminer_core::CoreInfo) -> Result<String, MiningError> {
+        info!("注册核心: {}", core_info.name);
+
+        // 简化实现：暂时返回成功
+        let core_id = format!("core_{}", uuid::Uuid::new_v4());
+        info!("核心注册成功: {}", core_id);
+        Ok(core_id)
+    }
+
+        /// 提交工作（为示例程序提供接口）
+    pub async fn submit_work_external(&self, work: cgminer_core::Work) -> Result<(), MiningError> {
+        info!("提交工作: {}", work.job_id);
+
+        // 直接使用cgminer-core的Work类型创建WorkItem
+        let work_item = WorkItem::new(work);
+
+        if let Ok(work_sender_guard) = self.work_sender.try_lock() {
+            if let Some(sender) = work_sender_guard.as_ref() {
+                sender.send(work_item)
+                    .map_err(|e| MiningError::WorkError(format!("提交工作失败: {}", e)))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 收集结果（为示例程序提供接口）
+    pub async fn collect_results(&self) -> Result<Vec<cgminer_core::MiningResult>, MiningError> {
+        // 简化实现：返回空结果
+        Ok(vec![])
+    }
+
     /// 启动挖矿
     pub async fn start(&self) -> Result<(), MiningError> {
         info!("Starting mining manager");
@@ -523,9 +556,10 @@ impl MiningManager {
         let stats = self.stats.clone();
         let _pool_manager = self.pool_manager.clone(); // 暂时不使用，因为缺少工作数据
         let core_result_handle = self.core_result_handle.clone();
+        let result_collection_interval = self.config.result_collection_interval;
 
         let handle = tokio::spawn(async move {
-            let mut interval = interval(Duration::from_millis(100)); // 每100ms检查一次结果
+            let mut interval = interval(result_collection_interval); // 使用配置的结果收集间隔，参考原版cgminer轮询延迟
 
             while *running.read().await {
                 interval.tick().await;
@@ -974,7 +1008,7 @@ impl UnifiedWorkDispatcher {
         // 使用轮询策略分发到核心
         for core_id in &active_core_ids {
             info!("📤 尝试向核心 {} 提交工作...", core_id);
-            match self.core_registry.submit_work_to_core(core_id, work_item.work.clone()).await {
+            match self.core_registry.submit_work_to_core(core_id, work_item.work.clone().into()).await {
                 Ok(()) => {
                     info!("✅ 工作成功分发到核心: {}", core_id);
                     return Ok(format!("core:{}", core_id));

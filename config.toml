@@ -22,24 +22,24 @@ scan_time = 30
 # 核心配置 (默认使用软算法核心)
 # =============================================================================
 [cores]
-# 启用的核心列表 - 默认使用软算法核心
-enabled_cores = ["software"]
+# 启用的核心列表 - 使用 cgminer-cpu-btc-core
+enabled_cores = ["cpu-btc"]
 
 # 默认核心
-default_core = "software"
+default_core = "cpu-btc"
 
-# 软算法核心配置 - Mac M4 优化
-[cores.software_core]
+# CPU-BTC 核心配置 - 使用 cgminer-cpu-btc-core
+[cores.cpu_btc]
 enabled = true
-device_count = 64            # Mac M4优化: 您已配置的设备数量
-min_hashrate = 2000000000.0  # 最小算力: 2 GH/s
-max_hashrate = 8000000000.0  # 最大算力: 8 GH/s (Mac M4优化)
-error_rate = 0.002           # 错误率: 0.2% (降低错误率)
-batch_size = 12000           # 批处理大小: 12000 (Mac M4大批处理优化)
-work_timeout_ms = 1500       # 工作超时: 1.5秒 (更快响应)
+device_count = 4             # 设备数量: 4个虚拟设备
+min_hashrate = 30000000.0    # 最小算力: 30 MH/s (实际cgminer-cpu-btc-core算力)
+max_hashrate = 40000000.0    # 最大算力: 40 MH/s (实际cgminer-cpu-btc-core算力)
+error_rate = 0.002           # 错误率: 0.2%
+batch_size = 12000           # 批处理大小: 12000
+work_timeout_ms = 1500       # 工作超时: 1.5秒
 
 # CPU绑定配置 - Mac M4 优化
-[cores.software_core.cpu_affinity]
+[cores.cpu_btc.cpu_affinity]
 enabled = false              # Mac M4: 禁用CPU绑定，依赖系统调度
 strategy = "intelligent"     # 智能策略
 prefer_performance_cores = true  # 优先使用性能核心
@@ -95,7 +95,7 @@ retry_interval = 10
 
 # F2Pool 矿池配置
 [[pools.pools]]
-url = "stratum+tcp://btc.f2pool.com:1314"
+url = "stratum+tcp://127.0.0.1:1314"
 user = "kayuii.bbt"
 password = "21235365876986800"
 priority = 1

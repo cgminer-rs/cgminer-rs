@@ -96,6 +96,15 @@ pub enum DeviceError {
 
     #[error("Invalid device state: {device_id}, state: {state}")]
     InvalidState { device_id: u32, state: String },
+
+    #[error("Core error: {0}")]
+    CoreError(String),
+}
+
+impl From<cgminer_core::error::CoreError> for DeviceError {
+    fn from(e: cgminer_core::error::CoreError) -> Self {
+        DeviceError::CoreError(e.to_string())
+    }
 }
 
 #[derive(Error, Debug, Clone)]

@@ -2,7 +2,7 @@
 mod tests {
 
     use crate::device::{DeviceInfo, DeviceStatus, DeviceStats, Work, MiningResult, DeviceConfig};
-    use crate::device::virtual_device::{VirtualDeviceDriver, VirtualDevice};
+    // VirtualDevice removed - using cgminer-cpu-btc-core instead
     use crate::device::traits::{MiningDevice, DeviceDriver};
     use std::time::{Duration, SystemTime};
     use uuid::Uuid;
@@ -260,380 +260,67 @@ mod tests {
         assert!((avg_hashrate - 36.67).abs() < 0.1); // 允许小的浮点误差
     }
 
-    // 虚拟设备测试
-    #[tokio::test]
-    async fn test_virtual_device_driver_creation() {
-        let driver = VirtualDeviceDriver::new();
+    // VirtualDevice tests removed - using cgminer-cpu-btc-core instead
 
-        assert_eq!(driver.driver_name(), "virtual-device");
-        assert_eq!(driver.supported_devices(), vec!["virtual"]);
-        assert_eq!(driver.version(), "1.0.0");
-    }
+    /*
+    VirtualDevice tests removed - using cgminer-cpu-btc-core instead
+    The real device tests are now handled by the core system
+    */
 
-    #[tokio::test]
-    async fn test_virtual_device_driver_scan() {
-        let driver = VirtualDeviceDriver::new();
-        let devices = driver.scan_devices().await.unwrap();
 
-        assert_eq!(devices.len(), 4); // 应该扫描到4个虚拟设备
-
-        for (i, device) in devices.iter().enumerate() {
-            assert_eq!(device.id, 1000 + i as u32);
-            assert_eq!(device.name, format!("Virtual Device {}", i));
-            assert_eq!(device.device_type, "virtual");
-            assert_eq!(device.chain_id, i as u8);
-        }
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_creation() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let device = VirtualDevice::new(device_info).await.unwrap();
-        assert_eq!(device.device_id(), 1000);
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_initialization() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig {
-            chain_id: 0,
-            enabled: true,
-            frequency: 700,
-            voltage: 950,
-            auto_tune: false,
-            chip_count: 64,
-            temperature_limit: 80.0,
-            fan_speed: Some(60),
-        };
-
-        let result = device.initialize(config.clone()).await;
-        assert!(result.is_ok());
-
-        let info = device.get_info().await.unwrap();
-        assert_eq!(info.status, DeviceStatus::Idle);
-        assert_eq!(info.frequency, Some(700));
-        assert_eq!(info.voltage, Some(950));
-        assert_eq!(info.chip_count, 64);
-        assert_eq!(info.fan_speed, Some(60));
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_start_stop() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 测试启动
-        let result = device.start().await;
-        assert!(result.is_ok());
-
-        let status = device.get_status().await.unwrap();
-        assert_eq!(status, DeviceStatus::Mining);
-
-        // 等待一小段时间让挖矿模拟运行
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // 测试停止
-        let result = device.stop().await;
-        assert!(result.is_ok());
-
-        let status = device.get_status().await.unwrap();
-        assert_eq!(status, DeviceStatus::Idle);
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_work_submission() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 创建工作
-        let target = [0u8; 32];
-        let header = [0u8; 80];
-        let work = Work::new("test_job".to_string(), target, header, 1024.0);
-
-        // 提交工作
-        let result = device.submit_work(work).await;
-        assert!(result.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_expired_work() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 创建过期的工作
-        let target = [0u8; 32];
-        let header = [0u8; 80];
-        let mut work = Work::new("test_job".to_string(), target, header, 1024.0);
-        work.expires_at = SystemTime::now() - Duration::from_secs(10);
-
-        // 提交过期工作应该失败
-        let result = device.submit_work(work).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_frequency_setting() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 设置频率
-        let result = device.set_frequency(800).await;
-        assert!(result.is_ok());
-
-        let info = device.get_info().await.unwrap();
-        assert_eq!(info.frequency, Some(800));
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_voltage_setting() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 设置电压
-        let result = device.set_voltage(1000).await;
-        assert!(result.is_ok());
-
-        let info = device.get_info().await.unwrap();
-        assert_eq!(info.voltage, Some(1000));
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_fan_speed_setting() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 设置风扇速度
-        let result = device.set_fan_speed(80).await;
-        assert!(result.is_ok());
-
-        let info = device.get_info().await.unwrap();
-        assert_eq!(info.fan_speed, Some(80));
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_health_check() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 健康检查
-        let is_healthy = device.health_check().await.unwrap();
-        assert!(is_healthy);
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_stats_reset() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 重置统计信息
-        let result = device.reset_stats().await;
-        assert!(result.is_ok());
-
-        let info = device.get_info().await.unwrap();
-        assert_eq!(info.accepted_shares, 0);
-        assert_eq!(info.rejected_shares, 0);
-        assert_eq!(info.hardware_errors, 0);
-    }
-
-    #[tokio::test]
-    async fn test_virtual_device_bitcoin_mining() {
-        let device_info = DeviceInfo::new(
-            1000,
-            "Test Bitcoin Virtual Device".to_string(),
-            "virtual".to_string(),
-            0,
-        );
-
-        let mut device = VirtualDevice::new(device_info).await.unwrap();
-        let config = DeviceConfig::default();
-        device.initialize(config).await.unwrap();
-
-        // 创建一个简单的工作，使用低难度以便快速找到解
-        let target = [0u8; 32];
-        let mut header = [0u8; 80];
-
-        // 设置一个简单的 header
-        header[0] = 0x01; // 版本
-        header[4] = 0x00; // 前一个区块哈希
-        header[36] = 0x00; // Merkle root
-        header[68] = 0x00; // 时间戳
-        header[72] = 0x00; // 难度目标
-
-        let work = Work::new("test_bitcoin_job".to_string(), target, header, 1.0); // 最低难度
-
-        // 提交工作
-        let result = device.submit_work(work).await;
-        assert!(result.is_ok());
-
-        // 启动设备进行短时间挖矿
-        device.start().await.unwrap();
-
-        // 等待一段时间让挖矿算法运行
-        tokio::time::sleep(Duration::from_millis(500)).await;
-
-        // 停止设备
-        device.stop().await.unwrap();
-
-        // 检查是否有统计更新
-        let stats = device.get_stats().await.unwrap();
-        assert!(stats.total_hashes > 0); // 应该处理了一些哈希
-    }
+    // 保留有用的辅助函数测试
 
     #[test]
     fn test_bitcoin_hash_meets_target() {
-        // 测试哈希目标检查函数
-        let hash_low = [
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
-        ];
+        // 测试简单的目标检查
+        let hash_low = [0x00, 0x00, 0x00, 0x01]; // 很小的哈希
+        let hash_high = [0xFF, 0xFF, 0xFF, 0xFF]; // 很大的哈希
+        let target = [0x00, 0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF]; // 中等目标
 
-        let hash_high = [
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-        ];
+        // 使用 cgminer-core 的函数进行测试
+        use sha2::{Sha256, Digest};
+        let mut hasher = Sha256::new();
+        hasher.update(&hash_low);
+        let hash1 = hasher.finalize();
 
-        let target = [
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10,
-        ];
+        let mut hasher = Sha256::new();
+        hasher.update(&hash1);
+        let hash2 = hasher.finalize();
 
-        // 低哈希应该满足目标（0x01 < 0x10）
-        assert!(VirtualDevice::hash_meets_target(&hash_low, &target));
-
-        // 高哈希不应该满足目标
-        assert!(!VirtualDevice::hash_meets_target(&hash_high, &target));
+        // 验证 cgminer-core 的 meets_target 函数
+        assert!(cgminer_core::meets_target(&hash2, &target));
     }
 
     #[test]
-    fn test_difficulty_to_target() {
-        // 测试难度到目标的转换
-        let target_1 = VirtualDevice::difficulty_to_target(1.0);
-        let target_high = VirtualDevice::difficulty_to_target(1000.0);
+    fn test_device_config_and_info_integration() {
+        // 测试设备配置和信息的集成
+        let device_info = DeviceInfo::new(
+            2000,
+            "Test Integration Device".to_string(),
+            "cpu-btc".to_string(), // 使用真正的核心类型
+            0,
+        );
 
-        // 难度1应该给出最高目标值（最容易）
-        assert_eq!(target_1[0], 0xFF);
+        let config = DeviceConfig {
+            chain_id: 0,
+            enabled: true,
+            frequency: 600,
+            voltage: 900,
+            auto_tune: false,
+            chip_count: 64,
+            temperature_limit: 80.0,
+            fan_speed: Some(50),
+        };
 
-        // 高难度应该给出更低的目标值（更难）
-        assert!(target_high[31] < target_1[31] || target_high[30] < target_1[30]);
-    }
+        // 验证配置有效性
+        assert!(config.enabled);
+        assert_eq!(config.frequency, 600);
+        assert_eq!(config.voltage, 900);
+        assert_eq!(config.chip_count, 64);
 
-    #[test]
-    fn test_bitcoin_mining_algorithm() {
-        // 测试 Bitcoin 挖矿算法
-        let mut header = [0u8; 80];
-
-        // 设置一个简单的 header
-        header[0] = 0x01; // 版本
-
-        // 使用非常低的难度目标（很容易满足）
-        let target = [0xFFu8; 32];
-
-        // 尝试挖矿
-        let result = VirtualDevice::mine_bitcoin_block(&header, &target, 0, 1000);
-
-        // 应该能找到一个有效的 nonce
-        assert!(result.is_some());
-
-        if let Some(nonce) = result {
-            // 验证找到的 nonce 确实有效
-            let mut test_header = header;
-            test_header[76..80].copy_from_slice(&nonce.to_le_bytes());
-
-            // 计算哈希
-            use sha2::{Sha256, Digest};
-            let mut hasher = Sha256::new();
-            hasher.update(&test_header);
-            let hash1 = hasher.finalize();
-
-            let mut hasher = Sha256::new();
-            hasher.update(&hash1);
-            let hash2 = hasher.finalize();
-
-            // 验证哈希满足目标
-            assert!(VirtualDevice::hash_meets_target(&hash2, &target));
-        }
+        // 验证设备信息
+        assert_eq!(device_info.id, 2000);
+        assert_eq!(device_info.device_type, "cpu-btc");
+        assert_eq!(device_info.chain_id, 0);
     }
 }

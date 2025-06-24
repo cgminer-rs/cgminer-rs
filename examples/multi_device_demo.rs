@@ -1,177 +1,205 @@
-use cgminer_rs::{MiningManager, Config};
-use cgminer_core::{CoreRegistry, CoreType};
-use cgminer_cpu_btc_core::{CpuBtcCore, CpuBtcCoreFactory};
-use std::sync::Arc;
-use tokio::time::{sleep, Duration};
-use tracing::{info, warn, error};
+//! 简单的 CGMiner-RS 演示
+//! 模拟 cgminer 风格输出，连接本地矿池转发
+
+use anyhow::Result;
+use cgminer_rs::{
+    config::Config,
+    StaticCoreRegistry as CoreRegistry,
+};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::time::sleep;
+
+// 模拟 cgminer 风格的时间戳
+fn cgminer_timestamp() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let hours = (now % 86400) / 3600;
+    let minutes = (now % 3600) / 60;
+    let seconds = now % 60;
+    format!("[{:02}:{:02}:{:02}]", hours, minutes, seconds)
+}
+
+// 模拟 cgminer 日志输出
+macro_rules! cgminer_log {
+    ($($arg:tt)*) => {
+        println!("{} {}", cgminer_timestamp(), format_args!($($arg)*))
+    };
+}
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 初始化日志系统
-    tracing_subscriber::fmt()
-        .with_env_filter("info")
-        .init();
+async fn main() -> Result<()> {
+    cgminer_log!("Started cgminer-rs 1.0.0");
 
-    info!("🚀 多设备挖矿演示 - CGMiner风格");
-
-    // 创建核心注册表
-    let core_registry = Arc::new(CoreRegistry::new());
-
-    // 注册CPU核心
-    #[cfg(feature = "cpu-btc")]
-    {
-        let cpu_factory = Box::new(CpuBtcCoreFactory::new());
-        core_registry.register_core(CoreType::CpuBtc, cpu_factory).await?;
-        info!("✅ CPU BTC核心已注册");
-    }
-
-    // 加载配置
-    let config = Config::from_file("config.toml")
+    // 1. 配置管理
+    cgminer_log!("Loading configuration...");
+    let mut config = Config::load("config.toml")
         .unwrap_or_else(|_| {
-            warn!("⚠️  使用默认配置");
+            cgminer_log!("Using default configuration");
             Config::default()
         });
 
-    // 创建挖矿管理器
-    let mining_manager = Arc::new(MiningManager::new(
-        config,
-        core_registry.clone(),
-    ).await?);
+    // 设置矿池连接
+    cgminer_log!("Pool 0: 127.0.0.1:1314");
 
-    info!("🔧 启动挖矿管理器...");
-    mining_manager.start().await?;
+    // 2. 初始化核心注册表
+    cgminer_log!("Initializing mining cores...");
+    let static_registry = CoreRegistry::new().await?;
+    let core_registry = static_registry.registry();
 
-    // 添加多个CPU核心（模拟多设备）
-    let device_count = num_cpus::get().min(8); // 最多8个设备
-    info!("💻 创建 {} 个CPU挖矿设备", device_count);
-
-    for i in 0..device_count {
-        let core_info = cgminer_core::CoreInfo {
-            name: format!("CPU设备-{}", i + 1),
-            core_type: CoreType::CpuBtc,
-            version: "1.0.0".to_string(),
-            description: format!("CPU挖矿设备 #{}", i + 1),
-            capabilities: vec!["sha256".to_string()],
-        };
-
-        match mining_manager.add_core(core_info).await {
-            Ok(_) => info!("✅ 设备 {} 添加成功", i + 1),
-            Err(e) => error!("❌ 设备 {} 添加失败: {}", i + 1, e),
-        }
-    }
-
-    // 创建工作数据
-    let work = cgminer_core::Work::new(
-        "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
-        "00000000ffffffffffffffffffffffffffffffffffffffffffffffffffffffff".to_string(),
-        1,
-        vec![0u8; 80],
-        1234567890,
-    );
-
-    info!("⛏️  开始多设备挖矿演示...");
-    info!("📊 CGMiner风格输出格式:");
-    info!("    [当前/1分钟/5分钟/15分钟]Mh/s A:[接受] R:[拒绝] HW:[硬件错误] [设备数]");
-
-    // 提交工作到所有设备
-    for i in 0..device_count {
-        if let Err(e) = mining_manager.submit_work(work.clone()).await {
-            error!("❌ 工作提交失败 (设备 {}): {}", i + 1, e);
-        }
-    }
-
-    // 监控循环 - CGMiner风格输出
-    let start_time = std::time::Instant::now();
-    let mut total_accepted = 0u64;
-    let mut total_rejected = 0u64;
-    let mut total_hw_errors = 0u64;
-    let mut hashrate_history = Vec::new();
-
-    for iteration in 0..60 { // 运行60秒
-        sleep(Duration::from_secs(1)).await;
-
-        // 收集统计信息
-        let stats = mining_manager.get_stats().await;
-        let current_hashrate = stats.hashrate;
-        hashrate_history.push(current_hashrate);
-
-        // 计算不同时间窗口的平均算力
-        let hashrate_1m = if hashrate_history.len() >= 60 {
-            hashrate_history[hashrate_history.len()-60..].iter().sum::<f64>() / 60.0
-        } else {
-            hashrate_history.iter().sum::<f64>() / hashrate_history.len() as f64
-        };
-
-        let hashrate_5m = if hashrate_history.len() >= 300 {
-            hashrate_history[hashrate_history.len()-300..].iter().sum::<f64>() / 300.0
-        } else {
-            hashrate_history.iter().sum::<f64>() / hashrate_history.len() as f64
-        };
-
-        let hashrate_15m = hashrate_history.iter().sum::<f64>() / hashrate_history.len() as f64;
-
-        // 更新统计
-        total_accepted += stats.total_hashrate as u64 / 1_000_000; // 模拟接受数
-        if iteration % 10 == 0 && iteration > 0 {
-            total_rejected += 1; // 模拟偶尔的拒绝
-        }
-        if iteration % 30 == 0 && iteration > 0 {
-            total_hw_errors += 1; // 模拟偶尔的硬件错误
-        }
-
-        // CGMiner风格输出
-        let elapsed = start_time.elapsed().as_secs();
-        if elapsed % 5 == 0 || iteration < 10 {
-            println!("{:.1}/{:.1}/{:.1}/{:.1}Mh/s A:{} R:{} HW:{} [{}DEV]",
-                current_hashrate / 1_000_000.0,
-                hashrate_1m / 1_000_000.0,
-                hashrate_5m / 1_000_000.0,
-                hashrate_15m / 1_000_000.0,
-                total_accepted,
-                total_rejected,
-                total_hw_errors,
-                device_count
-            );
-        }
-
-        // 每10秒显示详细设备信息
-        if iteration % 10 == 0 && iteration > 0 {
-            info!("📱 设备状态:");
-            for i in 0..device_count {
-                let device_hashrate = current_hashrate / device_count as f64;
-                info!("   设备 {}: {:.1} Mh/s, 温度: {}°C, 状态: {}",
-                    i + 1,
-                    device_hashrate / 1_000_000.0,
-                    45 + (i % 10) as u32, // 模拟温度 45-54°C
-                    if i % 4 == 0 { "正常" } else { "良好" }
-                );
+    // 3. 检查可用核心
+    match core_registry.list_factories().await {
+        Ok(factories) => {
+            cgminer_log!("Found {} mining core(s)", factories.len());
+            for factory in &factories {
+                cgminer_log!("Core: {} v{} ({})", factory.name, factory.version, factory.core_type);
             }
         }
+        Err(e) => {
+            cgminer_log!("ERROR: Failed to list cores: {}", e);
+            return Err(e.into());
+        }
     }
 
-    info!("⏹️ 停止挖矿管理器...");
-    mining_manager.stop().await?;
+    #[cfg(feature = "cpu-btc")]
+    {
+        // 4. 创建并启动挖矿核心
+        cgminer_log!("Creating CPU mining core...");
 
-    // 最终统计
-    let final_stats = mining_manager.get_stats().await;
-    let total_time = start_time.elapsed().as_secs();
-    let avg_hashrate = hashrate_history.iter().sum::<f64>() / hashrate_history.len() as f64;
+        let core_config = cgminer_core::CoreConfig {
+            name: "CPU0".to_string(),
+            enabled: true,
+            devices: vec![],
+            custom_params: std::collections::HashMap::new(),
+        };
 
-    info!("📊 最终统计报告:");
-    info!("   运行时间: {}秒", total_time);
-    info!("   设备数量: {}", device_count);
-    info!("   平均总算力: {:.2} Mh/s", avg_hashrate / 1_000_000.0);
-    info!("   平均单设备算力: {:.2} Mh/s", avg_hashrate / (device_count as f64 * 1_000_000.0));
-    info!("   接受的解: {}", total_accepted);
-    info!("   拒绝的解: {}", total_rejected);
-    info!("   硬件错误: {}", total_hw_errors);
+        match core_registry.create_core("cpu-btc", core_config).await {
+            Ok(core_id) => {
+                cgminer_log!("Core {} created successfully", core_id);
 
-    if total_accepted + total_rejected > 0 {
-        let success_rate = (total_accepted as f64 / (total_accepted + total_rejected) as f64) * 100.0;
-        info!("   成功率: {:.2}%", success_rate);
+                // 启动核心
+                match core_registry.start_core(&core_id).await {
+                    Ok(_) => {
+                        cgminer_log!("Core {} started", core_id);
+
+                        // 等待设备初始化
+                        sleep(Duration::from_secs(1)).await;
+
+                        // 获取初始统计
+                        if let Ok(stats) = core_registry.get_core_stats(&core_id).await {
+                            cgminer_log!("Devices: {} | Hashrate: {:.2} H/s",
+                                stats.active_devices, stats.total_hashrate);
+                        }
+
+                        // 模拟矿池连接
+                        cgminer_log!("Connecting to pool 127.0.0.1:1314...");
+                        sleep(Duration::from_millis(500)).await;
+                        cgminer_log!("Pool 0: Connected to 127.0.0.1:1314");
+                        cgminer_log!("Pool 0: Authorized worker");
+
+                        // 模拟接收工作并提交给设备
+                        cgminer_log!("Pool 0: New block detected");
+                        cgminer_log!("Work received from pool 0");
+
+                                                // 创建模拟工作并提交给核心
+                        let mock_work = cgminer_core::Work::new(
+                            "mock_job_001".to_string(),
+                            [0x00, 0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF],
+                            [0u8; 80], // 标准比特币区块头大小
+                            1.0, // 难度
+                        );
+
+                        if let Err(e) = core_registry.submit_work_to_core(&core_id, mock_work.into()).await {
+                            cgminer_log!("Failed to submit work: {}", e);
+                        } else {
+                            cgminer_log!("Work submitted to devices");
+                        }
+
+                        // 运行挖矿并显示统计
+                        cgminer_log!("Mining started...");
+
+                        let mut total_hashes = 0u64;
+                        let start_time = std::time::Instant::now();
+
+                        for i in 1..=30 {
+                            sleep(Duration::from_secs(1)).await;
+
+                            if let Ok(stats) = core_registry.get_core_stats(&core_id).await {
+                                total_hashes += stats.total_hashrate as u64;
+                                let elapsed = start_time.elapsed().as_secs();
+                                let avg_hashrate = if elapsed > 0 { total_hashes / elapsed } else { 0 };
+
+                                // 模拟 cgminer 风格的输出
+                                if i % 5 == 0 {
+                                    cgminer_log!("({}s): {} | A:0 R:0 HW:0 WU:{:.1}/m",
+                                        elapsed, format_hashrate(stats.total_hashrate),
+                                        stats.total_hashrate / 1000000.0 * 60.0);
+                                }
+
+                                // 偶尔模拟找到 share
+                                if i % 8 == 0 {
+                                    cgminer_log!("Accepted {} Diff 1/1 {} {}ms",
+                                        core_id, "127.0.0.1:1314", 50 + (i % 20));
+                                }
+                            }
+                        }
+
+                        // 测试 meets_target 函数
+                        cgminer_log!("Testing target validation...");
+
+                        let test_hash = [0x00, 0x00, 0x00, 0x01, 0xFF, 0xFF, 0xFF, 0xFF];
+                        let easy_target = [0x00, 0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF];
+                        let hard_target = [0x00, 0x00, 0x00, 0x00, 0x0F, 0xFF, 0xFF, 0xFF];
+
+                        let meets_easy = cgminer_core::meets_target(&test_hash, &easy_target);
+                        let meets_hard = cgminer_core::meets_target(&test_hash, &hard_target);
+
+                        cgminer_log!("Target test: Easy={} Hard={}", meets_easy, meets_hard);
+
+                        // 关闭
+                        cgminer_log!("Shutting down...");
+
+                        if let Err(e) = core_registry.stop_core(&core_id).await {
+                            cgminer_log!("ERROR: Failed to stop core: {}", e);
+                        } else {
+                            cgminer_log!("Core {} stopped", core_id);
+                        }
+
+                        if let Err(e) = core_registry.remove_core(&core_id).await {
+                            cgminer_log!("ERROR: Failed to remove core: {}", e);
+                        } else {
+                            cgminer_log!("Core {} removed", core_id);
+                        }
+                    }
+                    Err(e) => cgminer_log!("ERROR: Failed to start core: {}", e),
+                }
+            }
+            Err(e) => cgminer_log!("ERROR: Failed to create core: {}", e),
+        }
     }
 
-    info!("✅ 多设备挖矿演示完成！");
+    #[cfg(not(feature = "cpu-btc"))]
+    {
+        cgminer_log!("ERROR: CPU-BTC feature not enabled");
+        cgminer_log!("Run with: cargo run --example multi_device_demo --features=cpu-btc");
+    }
 
+    cgminer_log!("cgminer-rs shutdown complete");
     Ok(())
+}
+
+// 格式化算力显示
+fn format_hashrate(hashrate: f64) -> String {
+    if hashrate >= 1_000_000_000_000.0 {
+        format!("{:.2}TH/s", hashrate / 1_000_000_000_000.0)
+    } else if hashrate >= 1_000_000_000.0 {
+        format!("{:.2}GH/s", hashrate / 1_000_000_000.0)
+    } else if hashrate >= 1_000_000.0 {
+        format!("{:.2}MH/s", hashrate / 1_000_000.0)
+    } else if hashrate >= 1_000.0 {
+        format!("{:.2}KH/s", hashrate / 1_000.0)
+    } else {
+        format!("{:.2}H/s", hashrate)
+    }
 }

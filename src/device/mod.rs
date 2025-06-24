@@ -1,7 +1,6 @@
 pub mod manager;
 pub mod chain;
 pub mod traits;
-pub mod virtual_device;
 pub mod conversion;
 // factory模块已整合到manager中
 pub mod device_core_mapper;
