@@ -80,6 +80,24 @@ pub struct DeviceManager {
     running: Arc<RwLock<bool>>,
 }
 
+impl Clone for DeviceManager {
+    fn clone(&self) -> Self {
+        Self {
+            devices: self.devices.clone(),
+            device_info: self.device_info.clone(),
+            device_stats: self.device_stats.clone(),
+            core_registry: self.core_registry.clone(),
+            active_core_ids: self.active_core_ids.clone(),
+            device_core_mapper: self.device_core_mapper.clone(),
+            architecture_manager: self.architecture_manager.clone(),
+            config: self.config.clone(),
+            full_config: self.full_config.clone(),
+            monitoring_handle: None, // Do not clone the handle
+            running: self.running.clone(),
+        }
+    }
+}
+
 impl DeviceManager {
     /// 创建新的设备管理器（集成工厂功能）
     pub fn new(config: DeviceConfig, core_registry: Arc<CoreRegistry>) -> Self {
@@ -489,10 +507,6 @@ impl DeviceManager {
         Ok(())
     }
 
-
-
-
-
     /// 启动设备管理器
     pub async fn start(&mut self) -> Result<(), DeviceError> {
         info!("Starting device manager");
@@ -575,62 +589,30 @@ impl DeviceManager {
 
     /// 启动监控任务
     async fn start_monitoring(&mut self) -> Result<(), DeviceError> {
-        let devices = self.devices.clone();
+        let self_clone = self.clone();
         let device_info = self.device_info.clone();
         let device_stats = self.device_stats.clone();
         let running = self.running.clone();
         let scan_interval = Duration::from_secs(self.config.scan_interval);
 
-
-
         let handle = tokio::spawn(async move {
             let mut interval = interval(scan_interval);
-            let mut aggregated_stats_counter = 0u32;
-
             while *running.read().await {
                 interval.tick().await;
-                aggregated_stats_counter += 1;
 
-                // 更新设备状态和统计信息
-                let devices = devices.read().await;
-                for (device_id, device) in devices.iter() {
-                    let device = device.lock().await;
+                let ids: Vec<u32> = {
+                    let info_lock = device_info.read().await;
+                    info_lock.keys().cloned().collect()
+                };
 
-                    // 获取设备状态
-                    if let Ok(status) = device.get_status().await {
-                        let mut info = device_info.write().await;
-                        if let Some(device_info) = info.get_mut(device_id) {
-                            device_info.update_status(status);
+                for id in ids {
+                    if let Ok(core_stats) = self_clone.get_device_stats_core(id).await {
+                        let mut info_lock = device_info.write().await;
+                        if let Some(info) = info_lock.get_mut(&id) {
+                            info.update_hashrate(core_stats.average_hashrate.hashes_per_second);
                         }
+                        device_stats.write().await.insert(id, core_stats.into());
                     }
-
-                    // 获取设备统计信息
-                    if let Ok(stats) = device.get_stats().await {
-                        let mut device_stats = device_stats.write().await;
-                        device_stats.insert(*device_id, stats.clone());
-
-                        // 从统计信息中获取算力并更新到设备信息
-                        if let Some(avg_hashrate) = stats.get_average_hashrate() {
-                            let mut info = device_info.write().await;
-                            if let Some(device_info) = info.get_mut(device_id) {
-                                device_info.update_hashrate(avg_hashrate);
-                            }
-                        }
-                    }
-
-                    // 获取温度
-                    if let Ok(temperature) = device.get_temperature().await {
-                        let mut info = device_info.write().await;
-                        if let Some(device_info) = info.get_mut(device_id) {
-                            device_info.update_temperature(temperature);
-                        }
-                    }
-                }
-
-                // 每3个监控周期输出一次聚合算力统计（用于测试）
-                if aggregated_stats_counter % 3 == 0 {
-                    // 创建临时的聚合统计输出
-                    Self::log_aggregated_stats_static(&device_stats, &device_info).await;
                 }
             }
         });
@@ -639,63 +621,26 @@ impl DeviceManager {
         Ok(())
     }
 
-    /// 静态方法用于在监控任务中输出聚合统计
-    async fn log_aggregated_stats_static(
-        device_stats: &Arc<RwLock<HashMap<u32, DeviceStats>>>,
-        device_info: &Arc<RwLock<HashMap<u32, DeviceInfo>>>,
-    ) {
-        let device_stats = device_stats.read().await;
-        let device_info = device_info.read().await;
-
-        let mut total_current = 0.0;
-        let mut active_devices = 0;
-        let mut device_details = Vec::new();
-
-        for (device_id, info) in device_info.iter() {
-            if info.is_healthy() {
-                active_devices += 1;
-
-                // 优先使用设备统计信息中的算力
-                let device_hashrate = if let Some(stats) = device_stats.get(device_id) {
-                    if let Some(avg_hashrate) = stats.get_average_hashrate() {
-                        avg_hashrate
-                    } else {
-                        // 如果没有算力历史，使用设备信息中的算力
-                        info.hashrate
-                    }
-                } else {
-                    // 如果没有统计信息，使用设备信息中的算力
-                    info.hashrate
-                };
-
-                total_current += device_hashrate;
-                device_details.push((*device_id, device_hashrate, info.temperature.unwrap_or(0.0)));
-            }
-        }
-
-        if active_devices == 0 {
-            // 即使没有活跃设备，也输出一条信息表明监控正在运行
-            debug!("📊 算力统计汇总 | 活跃设备: 0 | 监控系统正在运行");
-            return;
-        }
-
-        // 输出总体统计（使用自适应单位）
-        info!("📊 算力统计汇总 | 活跃设备: {} | 总算力: {} | 平均: {}",
-              active_devices,
-              format_hashrate(total_current),
-              format_hashrate(total_current / active_devices as f64));
-
-        // 输出设备详情（分组显示，每行最多5个设备，使用自适应单位）
-        for chunk in device_details.chunks(5) {
-            let device_info_str: Vec<String> = chunk.iter().map(|(device_id, hashrate, temp)| {
-                format!("设备{}: {} ({:.1}°C)", device_id, format_hashrate(*hashrate), temp)
-            }).collect();
-
-            debug!("   📱 {}", device_info_str.join(" | "));
+    pub async fn get_device_stats_core(&self, device_id: u32) -> Result<cgminer_core::DeviceStats, DeviceError> {
+        if let Some(device) = self.devices.read().await.get(&device_id) {
+            let stats_result = device.lock().await.get_stats().await;
+            stats_result.map(|stats| {
+                let mut core_stats = cgminer_core::DeviceStats::new(0);
+                core_stats.total_hashes = stats.total_hashes;
+                core_stats.accepted_work = stats.valid_nonces;
+                core_stats.rejected_work = stats.invalid_nonces;
+                core_stats.hardware_errors = stats.hardware_errors;
+                core_stats.uptime = std::time::Duration::from_secs(stats.uptime_seconds);
+                if let Some(last_hashrate) = stats.hashrate_history.iter().last() {
+                    core_stats.current_hashrate = cgminer_core::types::HashRate::new(*last_hashrate);
+                }
+                core_stats.average_hashrate = cgminer_core::types::HashRate::new(stats.get_average_hashrate().unwrap_or(0.0));
+                core_stats
+            }).map_err(|e| e.into())
+        } else {
+            Err(DeviceError::NotFound { device_id })
         }
     }
-
-
 
     /// 获取设备信息
     pub async fn get_device_info(&self, device_id: u32) -> Option<DeviceInfo> {
@@ -831,9 +776,9 @@ impl DeviceManager {
         let device_info = self.device_info.read().await;
 
         let mut total_current = 0.0;
-        let total_1m = 0.0;
-        let total_5m = 0.0;
-        let total_15m = 0.0;
+        let mut total_1m = 0.0;
+        let mut total_5m = 0.0;
+        let mut total_15m = 0.0;
         let mut total_avg = 0.0;
         let mut active_devices = 0;
         let mut device_details = Vec::new();

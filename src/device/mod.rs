@@ -155,6 +155,24 @@ impl DeviceInfo {
     }
 }
 
+impl From<cgminer_core::DeviceStats> for DeviceStats {
+    fn from(core_stats: cgminer_core::DeviceStats) -> Self {
+        // This is a lossy conversion, as the internal DeviceStats has a different structure.
+        // We are primarily interested in the aggregate numbers for monitoring.
+        let mut stats = DeviceStats::new();
+        stats.total_hashes = core_stats.total_hashes;
+        stats.valid_nonces = core_stats.accepted_work;
+        stats.invalid_nonces = core_stats.rejected_work;
+        stats.hardware_errors = core_stats.hardware_errors;
+        stats.uptime_seconds = core_stats.uptime.as_secs();
+        if let Some(temp) = core_stats.temperature {
+            stats.record_temperature(temp.celsius);
+        }
+        stats.record_hashrate(core_stats.average_hashrate.hashes_per_second);
+        stats
+    }
+}
+
 // Work结构现在从cgminer-core导入
 pub use cgminer_core::types::Work;
 
